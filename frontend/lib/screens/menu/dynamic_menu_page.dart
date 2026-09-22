@@ -12,6 +12,7 @@ import '../leads/follow_up_page.dart';
 import '../sales/targets_page.dart';
 import '../sales/marketing_reports_page.dart';
 
+
 class DynamicMenuPage extends StatefulWidget {
   final String title;
   final List<MenuItemModel>? menuItems;
@@ -188,7 +189,7 @@ class _DynamicMenuPageState
 
       return;
     }
-
+    
     // =======================================================
     // GENERIC SUBMENU
     //

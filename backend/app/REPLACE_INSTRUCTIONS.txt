@@ -1,0 +1,26 @@
+DORADO CRM BACKEND FOUNDATION
+
+Replace:
+  backend/app/models.py
+  backend/app/admin_api.py
+  backend/app/main.py
+  backend/requirements.txt
+
+Then from backend folder:
+  pip install -r requirements.txt
+  python -m uvicorn app.main:app --reload
+
+Existing leads and EM01... employee records are NOT deleted.
+On startup, three stable reference columns are added to employee_master if missing and legacy text values are mapped where possible.
+
+First Admin claim (only when current legacy Admin has no password):
+POST /api/v1/setup/initialize
+{
+  "id": "EM05",
+  "employee_name": "Panchanan Kanji",
+  "mobile": "<mobile>",
+  "email": "<email>",
+  "password": "<new strong password>"
+}
+
+After password exists, setup cannot reset it; use authenticated change-password/user management.

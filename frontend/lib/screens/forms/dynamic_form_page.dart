@@ -1,4 +1,8 @@
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/network/api_client.dart';
 import '../../models/form_schema_model.dart';
@@ -15,34 +19,38 @@ class DynamicFormPage extends StatefulWidget {
   });
 
   @override
-  State<DynamicFormPage> createState() =>
-      _DynamicFormPageState();
+  State<DynamicFormPage> createState() => _DynamicFormPageState();
 }
 
-class _DynamicFormPageState
-    extends State<DynamicFormPage> {
-  final _formKey = GlobalKey<FormState>();
+class _DynamicFormPageState extends State<DynamicFormPage> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   late final FormService _formService;
 
   FormSchema? _schema;
 
-  final Map<String, TextEditingController>
-      _controllers = {};
+  final Map<String, TextEditingController> _controllers = {};
+  final Map<String, String> _executiveManagers = {};
+
+  // Forces dropdown/form widgets to rebuild after successful save.
+  int _formVersion = 0;
 
   bool _loading = true;
   bool _saving = false;
+  bool _gettingLocation = false;
 
   String? _error;
-  final Map<String, String> _executiveManagers = {};
+
+  final ImagePicker _imagePicker = ImagePicker();
+
+  double? _latitude;
+  double? _longitude;
 
   @override
   void initState() {
     super.initState();
 
-    _formService = FormService(
-      ApiClient(),
-    );
+    _formService = FormService(ApiClient());
 
     _loadExecutiveManagers();
     _loadForm();
@@ -59,7 +67,9 @@ class _DynamicFormPageState
 
         for (final item in result) {
           if (item is Map) {
-            final name = item['value']?.toString().trim() ?? '';
+            final name =
+                item['value']?.toString().trim() ?? '';
+
             final manager =
                 item['reporting_manager']?.toString().trim() ?? '';
 
@@ -70,8 +80,16 @@ class _DynamicFormPageState
         }
       }
     } catch (_) {
-      // Backend still auto-assigns the Marketing Head during save.
+      // Backend can still assign Marketing Head.
     }
+  }
+
+  String _today() {
+    final now = DateTime.now();
+
+    return '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _loadForm() async {
@@ -80,17 +98,19 @@ class _DynamicFormPageState
         widget.formCode,
       );
 
+      // Dispose old controllers if form is loaded again.
+      for (final controller in _controllers.values) {
+        controller.dispose();
+      }
+
+      _controllers.clear();
+
       for (final field in schema.fields) {
-        _controllers[field.key] =
-            TextEditingController();
+        _controllers[field.key] = TextEditingController();
       }
 
       if (widget.formCode == 'lead_entry') {
-        final now = DateTime.now();
-        _controllers['lead_date']?.text =
-            '${now.year.toString().padLeft(4, '0')}-'
-            '${now.month.toString().padLeft(2, '0')}-'
-            '${now.day.toString().padLeft(2, '0')}';
+        _controllers['lead_date']?.text = _today();
       }
 
       if (!mounted) return;
@@ -110,10 +130,235 @@ class _DynamicFormPageState
     }
   }
 
+  Future<void> _pickImage(
+    String fieldKey,
+    ImageSource source,
+  ) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 75,
+        maxWidth: 1600,
+      );
+
+      if (image == null) return;
+
+      if (!mounted) return;
+
+      setState(() {
+        _controllers[fieldKey]?.text = image.path;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to select image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showImageSource(
+    String fieldKey,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: 12,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.camera_alt_outlined,
+                  ),
+                  title: const Text('Take Photo'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+
+                    _pickImage(
+                      fieldKey,
+                      ImageSource.camera,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.photo_library_outlined,
+                  ),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+
+                    _pickImage(
+                      fieldKey,
+                      ImageSource.gallery,
+                    );
+                  },
+                ),
+                if ((_controllers[fieldKey]
+                            ?.text
+                            .trim()
+                            .isNotEmpty ??
+                        false))
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                    title: const Text(
+                      'Remove Image',
+                      style: TextStyle(
+                        color: Colors.red,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+
+                      setState(() {
+                        _controllers[fieldKey]?.clear();
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _getCurrentLocation(
+    String fieldKey,
+  ) async {
+    if (_gettingLocation) return;
+
+    setState(() {
+      _gettingLocation = true;
+    });
+
+    try {
+      bool serviceEnabled =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please turn on Location/GPS.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      LocationPermission permission =
+          await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission =
+            await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location permission was denied.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      if (permission ==
+          LocationPermission.deniedForever) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Location permission is permanently denied. '
+              'Please enable it from app settings.',
+            ),
+            action: SnackBarAction(
+              label: 'SETTINGS',
+              onPressed: () {
+                Geolocator.openAppSettings();
+              },
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      final Position position =
+          await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      _latitude = position.latitude;
+      _longitude = position.longitude;
+
+      // At this stage we store coordinates in the visible
+      // location field. Address conversion can be added later.
+      _controllers[fieldKey]?.text =
+          '${position.latitude.toStringAsFixed(6)}, '
+          '${position.longitude.toStringAsFixed(6)}';
+
+      // If schema contains latitude/longitude fields,
+      // populate them automatically as well.
+      _controllers['latitude']?.text =
+          position.latitude.toString();
+
+      _controllers['longitude']?.text =
+          position.longitude.toString();
+
+      if (!mounted) return;
+
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to get current location: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _gettingLocation = false;
+        });
+      }
+    }
+  }
+
   Future<void> _saveForm() async {
     if (_schema == null) return;
 
-    if (!_formKey.currentState!.validate()) {
+    final currentState = _formKey.currentState;
+
+    if (currentState == null ||
+        !currentState.validate()) {
       return;
     }
 
@@ -126,11 +371,9 @@ class _DynamicFormPageState
 
       for (final field in _schema!.fields) {
         values[field.key] =
-            _controllers[field.key]?.text.trim() ??
-                '';
+            _controllers[field.key]?.text.trim() ?? '';
       }
 
-      // Lead Date generated from Flutter frontend.
       if (widget.formCode == 'lead_entry') {
         values['lead_status'] = 'New Lead';
 
@@ -141,6 +384,14 @@ class _DynamicFormPageState
         values['quotation_given'] = false;
         values['negotiation_done'] = false;
         values['order_finalized'] = false;
+
+        if (_latitude != null) {
+          values['latitude'] = _latitude;
+        }
+
+        if (_longitude != null) {
+          values['longitude'] = _longitude;
+        }
       }
 
       await _formService.submitForm(
@@ -150,25 +401,9 @@ class _DynamicFormPageState
 
       if (!mounted) return;
 
-      for (final controller
-          in _controllers.values) {
-        controller.clear();
-      }
+      _resetForm();
 
-      _formKey.currentState?.reset();
-
-      if (widget.formCode == 'lead_entry') {
-        final now = DateTime.now();
-        _controllers['lead_date']?.text =
-            '${now.year.toString().padLeft(4, '0')}-'
-            '${now.month.toString().padLeft(2, '0')}-'
-            '${now.day.toString().padLeft(2, '0')}';
-      }
-
-      if (mounted) setState(() {});
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'Lead saved successfully',
@@ -179,8 +414,7 @@ class _DynamicFormPageState
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Save failed: $e',
@@ -197,6 +431,28 @@ class _DynamicFormPageState
     }
   }
 
+  void _resetForm() {
+    // Reset FormField internal states first.
+    _formKey.currentState?.reset();
+
+    for (final controller in _controllers.values) {
+      controller.clear();
+    }
+
+    _latitude = null;
+    _longitude = null;
+
+    if (widget.formCode == 'lead_entry') {
+      _controllers['lead_date']?.text = _today();
+    }
+
+    // Recreates dropdown widgets so old selected values
+    // do not remain visible after save.
+    setState(() {
+      _formVersion++;
+    });
+  }
+
   Widget _buildField(
     FormFieldSchema field,
   ) {
@@ -207,7 +463,8 @@ class _DynamicFormPageState
     }) {
       return InputDecoration(
         labelText: field.label,
-        hintText: hintText ?? 'Enter ${field.label}',
+        hintText:
+            hintText ?? 'Enter ${field.label}',
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
@@ -234,7 +491,8 @@ class _DynamicFormPageState
 
     String? validateValue(String? value) {
       if (field.required &&
-          (value == null || value.trim().isEmpty)) {
+          (value == null ||
+              value.trim().isEmpty)) {
         return '${field.label} is required';
       }
 
@@ -251,23 +509,33 @@ class _DynamicFormPageState
     if (field.type == 'dropdown') {
       final options = field.options;
 
+      final currentValue =
+          controller.text.trim();
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: DropdownButtonFormField<String>(
-          initialValue: controller.text.trim().isEmpty
-              ? null
-              : controller.text.trim(),
+          key: ValueKey(
+            '${field.key}-$_formVersion',
+          ),
+          initialValue:
+              currentValue.isEmpty ||
+                      !options.contains(currentValue)
+                  ? null
+                  : currentValue,
           isExpanded: true,
           decoration: decoration(
             hintText: 'Select ${field.label}',
           ),
           items: options
               .map(
-                (option) => DropdownMenuItem<String>(
+                (option) =>
+                    DropdownMenuItem<String>(
                   value: option,
                   child: Text(
                     option,
-                    overflow: TextOverflow.ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                 ),
               )
@@ -275,13 +543,35 @@ class _DynamicFormPageState
           onChanged: options.isEmpty
               ? null
               : (value) {
-                  controller.text = value ?? '';
+                  controller.text =
+                      value ?? '';
+
+                  // Auto assign Marketing Head when
+                  // executive/lead collector is selected.
+                  if (field.key ==
+                          'lead_collector_name' ||
+                      field.key == 'executive') {
+                    final manager =
+                        _executiveManagers[
+                                value ?? ''] ??
+                            '';
+
+                    final marketingController =
+                        _controllers[
+                            'marketing_head'];
+
+                    if (marketingController != null) {
+                      marketingController.text =
+                          manager;
+                    }
+
+                    setState(() {});
+                  }
                 },
           validator: validateValue,
         ),
       );
     }
-
 
     if (field.type == 'auto') {
       return Padding(
@@ -290,9 +580,12 @@ class _DynamicFormPageState
           controller: controller,
           readOnly: true,
           decoration: decoration(
-            hintText: 'Auto assigned from Lead Collector',
+            hintText:
+                'Auto assigned from Executive',
           ).copyWith(
-            suffixIcon: const Icon(Icons.auto_awesome_outlined),
+            suffixIcon: const Icon(
+              Icons.auto_awesome_outlined,
+            ),
           ),
           validator: validateValue,
         ),
@@ -305,9 +598,35 @@ class _DynamicFormPageState
         child: TextFormField(
           controller: controller,
           decoration: decoration(
-            hintText: 'Enter/search location',
+            hintText:
+                'Enter location or use GPS',
           ).copyWith(
-            prefixIcon: const Icon(Icons.location_on_outlined),
+            prefixIcon: const Icon(
+              Icons.location_on_outlined,
+            ),
+            suffixIcon: _gettingLocation
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child:
+                          CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    tooltip:
+                        'Use Current Location',
+                    icon: const Icon(
+                      Icons.my_location,
+                    ),
+                    onPressed: () =>
+                        _getCurrentLocation(
+                      field.key,
+                    ),
+                  ),
           ),
           validator: validateValue,
         ),
@@ -315,14 +634,38 @@ class _DynamicFormPageState
     }
 
     if (field.type == 'image') {
+      final hasImage =
+          controller.text.trim().isNotEmpty;
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: TextFormField(
+          key: ValueKey(
+            '${field.key}-image-$_formVersion',
+          ),
           controller: controller,
+          readOnly: true,
+          onTap: () =>
+              _showImageSource(field.key),
           decoration: decoration(
-            hintText: 'Image path / URL',
+            hintText: 'Camera / Gallery',
           ).copyWith(
-            prefixIcon: const Icon(Icons.image_outlined),
+            prefixIcon: Icon(
+              hasImage
+                  ? Icons.check_circle_outline
+                  : Icons.image_outlined,
+              color: hasImage
+                  ? Colors.green
+                  : null,
+            ),
+            suffixIcon: IconButton(
+              tooltip: 'Camera / Gallery',
+              icon: const Icon(
+                Icons.add_a_photo_outlined,
+              ),
+              onPressed: () =>
+                  _showImageSource(field.key),
+            ),
           ),
           validator: validateValue,
         ),
@@ -348,14 +691,16 @@ class _DynamicFormPageState
 
             DateTime initialDate = now;
 
-            final current =
-                DateTime.tryParse(controller.text.trim());
+            final current = DateTime.tryParse(
+              controller.text.trim(),
+            );
 
             if (current != null) {
               initialDate = current;
             }
 
-            final selected = await showDatePicker(
+            final selected =
+                await showDatePicker(
               context: context,
               initialDate: initialDate,
               firstDate: DateTime(2020),
@@ -368,22 +713,29 @@ class _DynamicFormPageState
                 '${selected.year.toString().padLeft(4, '0')}-'
                 '${selected.month.toString().padLeft(2, '0')}-'
                 '${selected.day.toString().padLeft(2, '0')}';
+
+            if (mounted) {
+              setState(() {});
+            }
           },
         ),
       );
     }
 
     int maxLines = 1;
+
     if (field.type == 'textarea') {
       maxLines = 4;
     }
 
-    TextInputType keyboardType = TextInputType.text;
+    TextInputType keyboardType =
+        TextInputType.text;
 
     if (field.type == 'phone') {
       keyboardType = TextInputType.phone;
     } else if (field.type == 'number') {
-      keyboardType = const TextInputType.numberWithOptions(
+      keyboardType =
+          const TextInputType.numberWithOptions(
         decimal: true,
       );
     }
@@ -425,11 +777,9 @@ class _DynamicFormPageState
     if (_error != null) {
       return Center(
         child: Padding(
-          padding:
-              const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
                 Icons.error_outline,
@@ -441,15 +791,13 @@ class _DynamicFormPageState
                 'Unable to load form',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 _error!,
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -459,9 +807,7 @@ class _DynamicFormPageState
 
     if (_schema == null) {
       return const Center(
-        child: Text(
-          'Form not available',
-        ),
+        child: Text('Form not available'),
       );
     }
 
@@ -470,9 +816,7 @@ class _DynamicFormPageState
       child: Center(
         child: ConstrainedBox(
           constraints:
-              const BoxConstraints(
-            maxWidth: 980,
-          ),
+              const BoxConstraints(maxWidth: 980),
           child: Form(
             key: _formKey,
             child: Column(
@@ -485,20 +829,15 @@ class _DynamicFormPageState
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius:
-                        BorderRadius.circular(
-                      12,
-                    ),
+                        BorderRadius.circular(12),
                     border: Border.all(
                       color:
-                          const Color(
-                        0xFFE3E9EF,
-                      ),
+                          const Color(0xFFE3E9EF),
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment
-                            .stretch,
+                        CrossAxisAlignment.stretch,
                     children: [
                       Text(
                         _schema!.title,
@@ -508,24 +847,26 @@ class _DynamicFormPageState
                           fontWeight:
                               FontWeight.w700,
                           color:
-                              Color(
-                            0xFF17212B,
-                          ),
+                              Color(0xFF17212B),
                         ),
                       ),
-                      const SizedBox(
-                        height: 18,
-                      ),
+                      const SizedBox(height: 18),
+
                       LayoutBuilder(
-                        builder: (context, constraints) {
-                          final fields = _schema!.fields;
+                        builder:
+                            (context, constraints) {
+                          final fields =
+                              _schema!.fields;
+
                           final useTwoColumns =
-                              constraints.maxWidth >= 620;
+                              constraints.maxWidth >=
+                                  620;
 
                           if (!useTwoColumns) {
                             return Column(
-                              children:
-                                  fields.map(_buildField).toList(),
+                              children: fields
+                                  .map(_buildField)
+                                  .toList(),
                             );
                           }
 
@@ -534,53 +875,78 @@ class _DynamicFormPageState
                           for (int i = 0;
                               i < fields.length;
                               i += 2) {
-                            final left = fields[i];
-                            final hasRight = i + 1 < fields.length;
-                            final right =
-                                hasRight ? fields[i + 1] : null;
+                            final left =
+                                fields[i];
 
-                            // Keep auto Marketing Head full-width.
-                            if (left.type == 'auto') {
-                              rows.add(_buildField(left));
+                            final hasRight =
+                                i + 1 <
+                                    fields.length;
+
+                            final right = hasRight
+                                ? fields[i + 1]
+                                : null;
+
+                            if (left.type ==
+                                'auto') {
+                              rows.add(
+                                _buildField(left),
+                              );
+
                               if (right != null) {
-                                rows.add(_buildField(right));
+                                rows.add(
+                                  _buildField(
+                                    right,
+                                  ),
+                                );
                               }
+
                               continue;
                             }
 
-                            // Keep image fields compact but paired like other fields.
                             rows.add(
                               Row(
                                 crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                    CrossAxisAlignment
+                                        .start,
                                 children: [
                                   Expanded(
-                                    child: _buildField(left),
+                                    child:
+                                        _buildField(
+                                      left,
+                                    ),
                                   ),
-                                  const SizedBox(width: 14),
+                                  const SizedBox(
+                                    width: 14,
+                                  ),
                                   Expanded(
-                                    child: right == null
-                                        ? const SizedBox.shrink()
-                                        : _buildField(right),
+                                    child: right ==
+                                            null
+                                        ? const SizedBox
+                                            .shrink()
+                                        : _buildField(
+                                            right,
+                                          ),
                                   ),
                                 ],
                               ),
                             );
                           }
 
-                          return Column(children: rows);
+                          return Column(
+                            children: rows,
+                          );
                         },
                       ),
-                      const SizedBox(
-                        height: 4,
-                      ),
+
+                      const SizedBox(height: 4),
+
                       SizedBox(
                         height: 48,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _saving
-                                  ? null
-                                  : _saveForm,
+                        child:
+                            ElevatedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : _saveForm,
                           style:
                               ElevatedButton
                                   .styleFrom(
@@ -594,9 +960,7 @@ class _DynamicFormPageState
                                 RoundedRectangleBorder(
                               borderRadius:
                                   BorderRadius
-                                      .circular(
-                                9,
-                              ),
+                                      .circular(9),
                             ),
                           ),
                           icon: _saving
@@ -605,8 +969,7 @@ class _DynamicFormPageState
                                   height: 20,
                                   child:
                                       CircularProgressIndicator(
-                                    strokeWidth:
-                                        2,
+                                    strokeWidth: 2,
                                     color:
                                         Colors.white,
                                   ),

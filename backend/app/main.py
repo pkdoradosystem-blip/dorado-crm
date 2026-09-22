@@ -4,9 +4,11 @@ import uuid
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, SessionLocal
+from .admin_api import router as admin_router, sync_foundation_data
 from .models import (
     Lead,
     LeadActivity,
@@ -23,10 +25,36 @@ from .models import (
 
 Base.metadata.create_all(bind=engine)
 
+
+def ensure_employee_reference_columns():
+    """Small safe migration for existing SQLite/PostgreSQL databases."""
+    inspector = inspect(engine)
+    existing = {column["name"] for column in inspector.get_columns("employee_master")}
+    required = {
+        "department_id": "VARCHAR(30)",
+        "role_id": "VARCHAR(30)",
+        "reporting_manager_id": "VARCHAR(30)",
+    }
+    with engine.begin() as connection:
+        for column_name, sql_type in required.items():
+            if column_name not in existing:
+                connection.execute(text(
+                    f"ALTER TABLE employee_master ADD COLUMN {column_name} {sql_type}"
+                ))
+
+
+ensure_employee_reference_columns()
+
+# Seed/sync only structural master data. Existing employees, leads and transactions are preserved.
+with SessionLocal() as _startup_db:
+    sync_foundation_data(_startup_db)
+
 app = FastAPI(
     title="Dorado CRM API",
     version="2.0.0",
 )
+
+app.include_router(admin_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -320,7 +348,7 @@ def health():
     return {
         "status": "ok",
         "application": "Dorado CRM API",
-        "database": "SQLite",
+        "database": engine.url.get_backend_name(),
     }
 
 
