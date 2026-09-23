@@ -3,6 +3,9 @@ from typing import Any
 import os
 import uuid
 
+from pydantic import BaseModel
+
+
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pwdlib import PasswordHash
@@ -1268,6 +1271,21 @@ def update_role(
 
     return model_to_dict(row)
 
+class CreateUserRequest(BaseModel):
+    id: str
+    employee_name: str
+    password: str
+
+    mobile: str | None = None
+    email: str | None = None
+    designation: str | None = None
+
+    department_id: str | None = None
+    role_id: str | None = None
+    reporting_manager_id: str | None = None
+
+    active: bool = True
+    force_password_reset: bool = True
 
 # =========================================================
 # USERS
@@ -1300,13 +1318,46 @@ def list_users(
 
     return result
 
-
-@router.post("/admin/users")
-def create_user(
-    payload: dict[str, Any],
+@router.get("/admin/next-user-id")
+def get_next_user_id(
     user: EmployeeMaster = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_permission(
+        db,
+        user,
+        "user_management",
+        "view",
+    )
+
+    employees = db.query(EmployeeMaster).all()
+
+    max_number = 0
+
+    for employee in employees:
+        employee_id = str(employee.id or "").strip().upper()
+
+        if employee_id.startswith("EM"):
+            try:
+                number = int(employee_id[2:])
+                if number > max_number:
+                    max_number = number
+            except ValueError:
+                pass
+
+    next_number = max_number + 1
+
+    return {
+        "next_id": f"EM{next_number:02d}"
+    }
+
+@router.post("/admin/users")
+def create_user(
+    payload: CreateUserRequest,
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    payload = payload.model_dump()
     require_permission(
         db,
         user,
