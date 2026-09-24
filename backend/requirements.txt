@@ -5,4 +5,4 @@ psycopg[binary]>=3.2,<4.0
 
 PyJWT>=2.9,<3.0
 pwdlib[argon2]>=0.2,<1.0
-python-multipart>=0.0.9,<1.0psycopg2-binary>=2.9,<3.0
+python-multipart>=0.0.9,<1.0`npsycopg2-binary>=2.9,<3.0
