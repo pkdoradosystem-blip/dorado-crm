@@ -967,51 +967,112 @@ def initialize_system(
     payload: dict[str, Any],
     db: Session = Depends(get_db),
 ):
-    # Always sync structural masters first. This does not delete or replace business data.
+    # Create/sync Departments, Roles, Modules and Admin permissions.
     sync_foundation_data(db)
 
+    # Do not allow initialization again once an Admin with password exists.
     existing_admin = (
         db.query(EmployeeMaster)
-        .filter((EmployeeMaster.role_id == "ROL001") | (EmployeeMaster.app_role == "Admin"))
+        .filter(
+            (EmployeeMaster.role_id == "ROL001")
+            | (EmployeeMaster.app_role == "Admin")
+        )
         .first()
     )
 
-    requested_id = str(payload.get("id") or "").strip()
-    requested_user = (
-        db.query(EmployeeMaster).filter(EmployeeMaster.id == requested_id).first()
-        if requested_id else None
-    )
-
-    # Existing legacy Admin with no password may be claimed once (e.g. EM05).
-    target = requested_user or existing_admin
-    if target is not None and target.password:
-        raise HTTPException(status_code=400, detail="System already initialized")
-
-    if target is None:
+    if existing_admin is not None and existing_admin.password:
         raise HTTPException(
             status_code=400,
-            detail="Existing employee ID is required for first Admin setup",
+            detail="System already initialized",
         )
 
-    mobile = str(payload.get("mobile") or target.mobile or "").strip()
-    email = str(payload.get("email") or target.email or "").strip()
+    user_id = str(payload.get("id") or "EM01").strip()
+    employee_name = str(payload.get("employee_name") or "").strip()
+    mobile = str(payload.get("mobile") or "").strip()
+    email = str(payload.get("email") or "").strip()
     password = str(payload.get("password") or "")
 
+    if not employee_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Admin employee name is required",
+        )
+
     if not mobile:
-        raise HTTPException(status_code=400, detail="Admin mobile number is required")
+        raise HTTPException(
+            status_code=400,
+            detail="Admin mobile number is required",
+        )
+
     if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Admin password must be at least 6 characters")
+        raise HTTPException(
+            status_code=400,
+            detail="Admin password must be at least 6 characters",
+        )
 
-    target.employee_name = str(payload.get("employee_name") or target.employee_name).strip()
-    target.mobile = mobile
-    target.email = email or None
-    target.active = True
-    target.password = create_password_hash(password)
-    target.force_password_reset = False
-    apply_user_master_refs(db, target, {"department_id": "DEP001", "role_id": "ROL001"})
+    # Check whether requested Employee ID already exists.
+    target = (
+        db.query(EmployeeMaster)
+        .filter(EmployeeMaster.id == user_id)
+        .first()
+    )
 
-    audit(db, target.id, "INITIALIZE_ADMIN", "user_management", "EmployeeMaster", target.id)
+    # Fresh PostgreSQL database: create the first employee/admin.
+    if target is None:
+        target = EmployeeMaster(
+            id=user_id,
+            employee_name=employee_name,
+            mobile=mobile,
+            email=email or None,
+            designation="Administrator",
+            active=True,
+            password=create_password_hash(password),
+            force_password_reset=False,
+            date_of_joining=now_local(),
+        )
+
+        db.add(target)
+        db.flush()
+
+    else:
+        # Existing employee without initialized password can become first Admin.
+        if target.password:
+            raise HTTPException(
+                status_code=400,
+                detail="This employee already has a password",
+            )
+
+        target.employee_name = employee_name
+        target.mobile = mobile
+        target.email = email or None
+        target.active = True
+        target.password = create_password_hash(password)
+        target.force_password_reset = False
+
+        if not target.date_of_joining:
+            target.date_of_joining = now_local()
+
+    # Make first user Management/Admin.
+    apply_user_master_refs(
+        db,
+        target,
+        {
+            "department_id": "DEP001",
+            "role_id": "ROL001",
+        },
+    )
+
+    audit(
+        db,
+        target.id,
+        "INITIALIZE_ADMIN",
+        "user_management",
+        "EmployeeMaster",
+        target.id,
+    )
+
     db.commit()
+    db.refresh(target)
 
     return {
         "success": True,
