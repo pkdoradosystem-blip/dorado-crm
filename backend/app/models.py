@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    ForeignKey,
 )
 
 from .database import Base
@@ -111,28 +112,82 @@ class LeadActivity(Base):
 class EmployeeMaster(Base):
     __tablename__ = "employee_master"
 
+    # =====================================================
+    # BASIC INFORMATION
+    # =====================================================
+
     id = Column(String(30), primary_key=True)
     employee_name = Column(String(150), nullable=False)
-    email = Column(String(150))
-    designation = Column(String(100))
-    mobile = Column(String(30))
+
+    father_name = Column(String(150), nullable=True)
+    date_of_birth = Column(DateTime, nullable=True)
+    gender = Column(String(30), nullable=True)
+
+    mobile = Column(String(30), nullable=True)
+    alternate_mobile = Column(String(30), nullable=True)
+    email = Column(String(150), nullable=True)
+
+    # =====================================================
+    # ADDRESS
+    # =====================================================
+
+    present_address = Column(Text, nullable=True)
+    permanent_address = Column(Text, nullable=True)
+
+    # =====================================================
+    # EMPLOYMENT INFORMATION
+    # =====================================================
+
+    designation = Column(String(100), nullable=True)
+    date_of_joining = Column(DateTime, nullable=True)
 
     active = Column(Boolean, default=True, nullable=False)
 
-    app_role = Column(String(100))
-    password = Column(String(255))
-    force_password_reset = Column(Boolean, default=False)
+    # Legacy display-text fields retained for compatibility
+    department = Column(String(100), nullable=True)
+    reporting_manager = Column(String(150), nullable=True)
+    app_role = Column(String(100), nullable=True)
 
-    # Legacy display-text fields retained for backward compatibility.
-    department = Column(String(100))
-    reporting_manager = Column(String(150))
-
-    # Stable master references used by the new database-driven UI.
+    # Stable master references
     department_id = Column(String(30), nullable=True, index=True)
     role_id = Column(String(30), nullable=True, index=True)
     reporting_manager_id = Column(String(30), nullable=True, index=True)
 
-    date_of_joining = Column(DateTime)
+    # =====================================================
+    # GOVERNMENT / IDENTITY DETAILS
+    # =====================================================
+
+    aadhaar_number = Column(String(20), nullable=True)
+    pan_number = Column(String(20), nullable=True)
+
+    # =====================================================
+    # PF / ESIC
+    # =====================================================
+
+    uan_number = Column(String(30), nullable=True)
+    pf_number = Column(String(50), nullable=True)
+    esic_number = Column(String(50), nullable=True)
+
+    # =====================================================
+    # BANK DETAILS
+    # =====================================================
+
+    bank_name = Column(String(150), nullable=True)
+    bank_account_holder_name = Column(String(150), nullable=True)
+    bank_account_number = Column(String(50), nullable=True)
+    bank_ifsc = Column(String(20), nullable=True)
+    bank_branch = Column(String(150), nullable=True)
+
+    # =====================================================
+    # PASSWORD / LOGIN SECURITY
+    # =====================================================
+
+    password = Column(String(255), nullable=True)
+    force_password_reset = Column(Boolean, default=False)
+
+    # Pet name will NOT be stored as readable text.
+    # Only its password-style hash will be stored.
+    security_pet_name_hash = Column(String(255), nullable=True)
 
 
 # =========================================================
@@ -731,3 +786,27 @@ class SalesFollowupOutcomeMaster(Base):
 
     sort_order = Column(Integer)
     active = Column(Boolean, default=True, nullable=False)
+    # =========================================================
+# PASSWORD RESET OTP
+# =========================================================
+
+class PasswordResetOTP(Base):
+    __tablename__ = "password_reset_otps"
+
+    id = Column(String(36), primary_key=True)
+
+    user_id = Column(
+        String(30),
+        ForeignKey("employee_master.id"),
+        nullable=False,
+        index=True,
+    )
+
+    otp_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    created_at = Column(
+        DateTime,
+        default=datetime.now,
+        nullable=False,
+    )

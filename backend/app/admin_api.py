@@ -5,7 +5,6 @@ import uuid
 
 from pydantic import BaseModel
 
-
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pwdlib import PasswordHash
@@ -24,6 +23,7 @@ from .models import (
     UserSession,
     AuditLog,
     Lead,
+    
 )
 
 
@@ -86,8 +86,6 @@ def audit(
 
 def create_password_hash(password: str) -> str:
     return password_hash.hash(password)
-
-
 def verify_password(password: str, hashed_password: str | None) -> bool:
     if not hashed_password:
         return False
@@ -97,6 +95,11 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
     except Exception:
         # Temporary backward compatibility for old plain-text passwords.
         return password == hashed_password
+
+# =========================================================
+# PASSWORD RESET HELPERS
+# =========================================================
+
 
 
 def create_access_token(
