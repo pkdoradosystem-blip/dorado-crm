@@ -95,6 +95,50 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
     except Exception:
         # Temporary backward compatibility for old plain-text passwords.
         return password == hashed_password
+def normalize_date_value(value):
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    if "T" in text:
+        text = text.split("T")[0]
+
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        pass
+
+    try:
+        return datetime.strptime(text, "%d/%m/%Y").date().isoformat()
+    except ValueError:
+        return None
+
+    PASSWORD_RESET_TOKEN_MINUTES = 10
+
+
+def create_password_reset_token(user_id: str) -> str:
+    expires = datetime.now(timezone.utc) + timedelta(
+        minutes=PASSWORD_RESET_TOKEN_MINUTES
+    )
+
+    payload = {
+        "sub": user_id,
+        "purpose": "password_reset",
+        "exp": expires,
+    }
+
+    return jwt.encode(
+        payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
 
 # =========================================================
 # PASSWORD RESET HELPERS
@@ -457,6 +501,173 @@ def require_permission(
 # =========================================================
 # LOGIN
 # =========================================================
+@router.post("/auth/forgot-password/verify")
+def forgot_password_verify(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    login = str(payload.get("login") or "").strip()
+    date_of_birth = normalize_date_value(
+        payload.get("date_of_birth")
+    )
+    pet_name = str(
+        payload.get("pet_name") or ""
+    ).strip().lower()
+
+    if not login or not date_of_birth or not pet_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee ID/Mobile, Date of Birth and Pet Name are required",
+        )
+
+    user = (
+        db.query(EmployeeMaster)
+        .filter(
+            (EmployeeMaster.id == login)
+            | (EmployeeMaster.mobile == login)
+        )
+        .first()
+    )
+
+    # Same message for all verification failures
+    if user is None or not user.active:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to verify employee details",
+        )
+
+    stored_dob = normalize_date_value(
+        user.date_of_birth
+    )
+
+    if stored_dob != date_of_birth:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to verify employee details",
+        )
+
+    if not verify_password(
+        pet_name,
+        user.security_pet_name_hash,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to verify employee details",
+        )
+
+    reset_token = create_password_reset_token(
+        user.id
+    )
+
+    return {
+        "verified": True,
+        "reset_token": reset_token,
+        "expires_in_minutes": PASSWORD_RESET_TOKEN_MINUTES,
+    }
+
+
+@router.post("/auth/forgot-password/reset")
+def forgot_password_reset(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    reset_token = str(
+        payload.get("reset_token") or ""
+    ).strip()
+
+    new_password = str(
+        payload.get("new_password") or ""
+    )
+
+    confirm_password = str(
+        payload.get("confirm_password") or ""
+    )
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Reset token is required",
+        )
+
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 6 characters",
+        )
+
+    if new_password != confirm_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Passwords do not match",
+        )
+
+    try:
+        token_data = jwt.decode(
+            reset_token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Reset link has expired or is invalid",
+        )
+
+    if token_data.get("purpose") != "password_reset":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset token",
+        )
+
+    user_id = str(
+        token_data.get("sub") or ""
+    ).strip()
+
+    user = (
+        db.query(EmployeeMaster)
+        .filter(EmployeeMaster.id == user_id)
+        .first()
+    )
+
+    if user is None or not user.active:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to reset password",
+        )
+
+    user.password = create_password_hash(
+        new_password
+    )
+    user.force_password_reset = False
+
+    # Revoke all existing sessions after password reset
+    sessions = (
+        db.query(UserSession)
+        .filter(UserSession.user_id == user.id)
+        .all()
+    )
+
+    for session in sessions:
+        session.revoked = True
+
+    audit(
+        db,
+        user.id,
+        "PASSWORD_RESET",
+        "user_management",
+        "EmployeeMaster",
+        user.id,
+        "Password reset using DOB and security answer",
+    )
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Password reset successfully",
+    }
+
+
 
 @router.post("/auth/login")
 def login(
@@ -1463,16 +1674,61 @@ def create_user(
             detail="User ID already exists",
         )
 
+    pet_name = str(payload.get("pet_name") or "").strip()
+
     row = EmployeeMaster(
         id=user_id,
         employee_name=employee_name,
-        email=payload.get("email"),
-        designation=payload.get("designation"),
+
+        # Basic Information
+        father_name=payload.get("father_name"),
+        date_of_birth=payload.get("date_of_birth"),
+        gender=payload.get("gender"),
         mobile=payload.get("mobile"),
+        alternate_mobile=payload.get("alternate_mobile"),
+        email=payload.get("email"),
+
+        # Address
+        present_address=payload.get("present_address"),
+        permanent_address=payload.get("permanent_address"),
+
+        # Employment
+        designation=payload.get("designation"),
         active=bool(payload.get("active", True)),
+        date_of_joining=payload.get("date_of_joining") or now_local(),
+
+        # Identity
+        aadhaar_number=payload.get("aadhaar_number"),
+        pan_number=payload.get("pan_number"),
+
+        # PF / ESIC
+        uan_number=payload.get("uan_number"),
+        pf_number=payload.get("pf_number"),
+        esic_number=payload.get("esic_number"),
+
+        # Bank
+        bank_name=payload.get("bank_name"),
+        bank_account_holder_name=payload.get(
+            "bank_account_holder_name"
+        ),
+        bank_account_number=payload.get(
+            "bank_account_number"
+        ),
+        bank_ifsc=payload.get("bank_ifsc"),
+        bank_branch=payload.get("bank_branch"),
+
+        # Login
         password=create_password_hash(password),
-        force_password_reset=bool(payload.get("force_password_reset", True)),
-        date_of_joining=now_local(),
+        force_password_reset=bool(
+            payload.get("force_password_reset", True)
+        ),
+
+        # Forgot Password Security
+        security_pet_name_hash=(
+            create_password_hash(pet_name.lower())
+            if pet_name
+            else None
+        ),
     )
     apply_user_master_refs(db, row, payload)
 
@@ -1524,8 +1780,29 @@ def update_user(
         )
 
     editable = {
-        "employee_name", "email", "designation", "mobile",
-        "active", "force_password_reset",
+        "employee_name",
+        "father_name",
+        "date_of_birth",
+        "gender",
+        "mobile",
+        "alternate_mobile",
+        "email",
+        "present_address",
+        "permanent_address",
+        "designation",
+        "date_of_joining",
+        "aadhaar_number",
+        "pan_number",
+        "uan_number",
+        "pf_number",
+        "esic_number",
+        "bank_name",
+        "bank_account_holder_name",
+        "bank_account_number",
+        "bank_ifsc",
+        "bank_branch",
+        "active",
+        "force_password_reset",
     }
 
     for key, value in payload.items():
@@ -1534,6 +1811,17 @@ def update_user(
 
     apply_user_master_refs(db, row, payload)
 
+    # Update Pet Name securely.
+    # Plain pet name is never stored in the database.
+    if "pet_name" in payload:
+        pet_name = str(payload.get("pet_name") or "").strip()
+
+        if pet_name:
+            row.security_pet_name_hash = create_password_hash(
+                pet_name.lower()
+            )
+
+    # Optional password update
     if payload.get("password"):
         password = str(payload["password"])
 
@@ -1558,9 +1846,12 @@ def update_user(
     db.refresh(row)
 
     data = model_to_dict(row)
-    data.pop("password", None)
 
-    return data
+    # Never expose security values through API response
+    data.pop("password", None)
+    data.pop("security_pet_name_hash", None)
+
+    return 
 
 
 @router.delete("/admin/users/{user_id}")
