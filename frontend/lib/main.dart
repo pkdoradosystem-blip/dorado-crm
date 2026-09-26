@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/auth/auth_service.dart';
 import 'core/network/api_client.dart';
 import 'screens/auth/login_page.dart';
+import 'screens/auth/change_password_page.dart';
 import 'screens/dashboard/dashboard_page.dart';
 import 'services/services.dart';
 
@@ -26,6 +27,7 @@ class _DoradoCRMState extends State<DoradoCRM> {
 
   bool _checkingSession = true;
   bool _loggedIn = false;
+  bool _forcePasswordReset = false;
 
   @override
   void initState() {
@@ -41,26 +43,50 @@ class _DoradoCRMState extends State<DoradoCRM> {
   }
 
   Future<void> _checkSession() async {
-    final loggedIn =
-        await _authService.hasSession();
+    final loggedIn = await _authService.hasSession();
+
+    if (!mounted) return;
+
+    bool forcePasswordReset = false;
+
+    if (loggedIn) {
+      final user = await _authService.getSavedUser();
+
+      forcePasswordReset =
+          user?['force_password_reset'] == true;
+    }
 
     if (!mounted) return;
 
     setState(() {
       _loggedIn = loggedIn;
+      _forcePasswordReset = forcePasswordReset;
       _checkingSession = false;
     });
   }
 
-  void _onLoginSuccess() {
+  Future<void> _onLoginSuccess() async {
+    final user = await _authService.getSavedUser();
+
+    if (!mounted) return;
+
     setState(() {
       _loggedIn = true;
+      _forcePasswordReset =
+          user?['force_password_reset'] == true;
+    });
+  }
+
+  void _onPasswordChanged() {
+    setState(() {
+      _forcePasswordReset = false;
     });
   }
 
   void _onLogout() {
     setState(() {
       _loggedIn = false;
+      _forcePasswordReset = false;
     });
   }
 
@@ -84,18 +110,23 @@ class _DoradoCRMState extends State<DoradoCRM> {
       ),
       home: _checkingSession
           ? const _StartupPage()
-          : _loggedIn
-              ? DashboardPage(
+          : !_loggedIn
+              ? LoginPage(
                   authService: _authService,
-                  menuService: _menuService,
-                  formService: _formService,
-                  onLogout: _onLogout,
+                  onLoginSuccess: _onLoginSuccess,
                 )
-              : LoginPage(
-                  authService: _authService,
-                  onLoginSuccess:
-                      _onLoginSuccess,
-                ),
+              : _forcePasswordReset
+                  ? ChangePasswordPage(
+                      authService: _authService,
+                      onPasswordChanged:
+                          _onPasswordChanged,
+                    )
+                  : DashboardPage(
+                      authService: _authService,
+                      menuService: _menuService,
+                      formService: _formService,
+                      onLogout: _onLogout,
+                    ),
     );
   }
 }

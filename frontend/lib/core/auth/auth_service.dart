@@ -91,6 +91,52 @@ class AuthService {
     }
   }
 
+Future<void> changePassword({
+  required String currentPassword,
+  required String newPassword,
+}) async {
+  final response = await apiClient.post(
+    '/api/v1/auth/change-password',
+    {
+      'old_password': currentPassword,
+      'new_password': newPassword,
+    },
+  );
+
+  if (response is! Map) {
+    throw Exception('Invalid password change response');
+  }
+
+  final data = Map<String, dynamic>.from(response);
+
+  // Backend returns the updated user.
+  final userRaw = data['user'];
+
+  if (userRaw is Map) {
+    final user = Map<String, dynamic>.from(userRaw);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _userKey,
+      jsonEncode(user),
+    );
+  } else {
+    // If backend does not return user,
+    // update the locally saved force-reset flag.
+    final currentUser = await getSavedUser();
+
+    if (currentUser != null) {
+      currentUser['force_password_reset'] = false;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _userKey,
+        jsonEncode(currentUser),
+      );
+    }
+  }
+}
+
   Future<void> logout() async {
     try {
       await apiClient.post('/api/v1/auth/logout', {});

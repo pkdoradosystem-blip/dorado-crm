@@ -124,6 +124,44 @@ class _AddUserPageState extends State<AddUserPage> {
             _idOf(item))
         .toString();
   }
+String _userRoleName(Map<String, dynamic> user) {
+  final directRole = (user['role_name'] ??
+          user['role'] ??
+          user['role_title'])
+      ?.toString()
+      .trim();
+
+  if (directRole != null && directRole.isNotEmpty) {
+    return directRole;
+  }
+
+  final userRoleId =
+      (user['role_id'] ?? '').toString().trim();
+
+  if (userRoleId.isEmpty) {
+    return '';
+  }
+
+  for (final role in _roles) {
+    if (_idOf(role) == userRoleId) {
+      return _roleName(role);
+    }
+  }
+
+  return '';
+}
+
+String _reportingManagerLabel(
+    Map<String, dynamic> user) {
+  final name = _userName(user);
+  final role = _userRoleName(user);
+
+  if (role.isEmpty) {
+    return name;
+  }
+
+  return '$name • $role';
+}
 
   Future<void> _loadOptions() async {
   if (mounted) {
@@ -410,21 +448,20 @@ class _AddUserPageState extends State<AddUserPage> {
                       icon:
                           Icons.business_outlined,
                     ),
-                    items: _departments
-                        .where(
-                          (item) =>
-                              _idOf(item).isNotEmpty,
-                        )
-                        .map(
-                          (item) =>
-                              DropdownMenuItem<String>(
-                            value: _idOf(item),
-                            child: Text(
-                              _departmentName(item),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                    items: {
+  for (final item in _departments)
+    if (_idOf(item).isNotEmpty)
+      _departmentName(item).trim().toLowerCase(): item,
+}.values
+    .map(
+      (item) => DropdownMenuItem<String>(
+        value: _idOf(item),
+        child: Text(
+          _departmentName(item),
+        ),
+      ),
+    )
+    .toList(),
                     onChanged: (value) {
                       setState(() {
                         _departmentId = value;
@@ -441,21 +478,20 @@ class _AddUserPageState extends State<AddUserPage> {
                       icon:
                           Icons.admin_panel_settings_outlined,
                     ),
-                    items: _roles
-                        .where(
-                          (item) =>
-                              _idOf(item).isNotEmpty,
-                        )
-                        .map(
-                          (item) =>
-                              DropdownMenuItem<String>(
-                            value: _idOf(item),
-                            child: Text(
-                              _roleName(item),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                    items: {
+  for (final item in _roles)
+    if (_idOf(item).isNotEmpty)
+      _roleName(item).trim().toLowerCase(): item,
+}.values
+    .map(
+      (item) => DropdownMenuItem<String>(
+        value: _idOf(item),
+        child: Text(
+          _roleName(item),
+        ),
+      ),
+    )
+    .toList(),
                     onChanged: (value) {
                       setState(() {
                         _roleId = value;
@@ -480,21 +516,20 @@ class _AddUserPageState extends State<AddUserPage> {
                           'No Reporting Manager',
                         ),
                       ),
-                      ..._users
-                          .where(
-                            (item) =>
-                                _idOf(item).isNotEmpty,
-                          )
-                          .map(
-                            (item) =>
-                                DropdownMenuItem<String>(
-                              value: _idOf(item),
-                              child: Text(
-                                _userName(item),
-                              ),
-                            ),
-                          ),
-                    ],
+                     ..._users
+    .where(
+      (item) => _idOf(item).isNotEmpty,
+    )
+    .map(
+      (item) => DropdownMenuItem<String>(
+        value: _idOf(item),
+        child: Text(
+          _reportingManagerLabel(item),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ),
+],
                     onChanged: (value) {
                       setState(() {
                         _reportingManagerId =

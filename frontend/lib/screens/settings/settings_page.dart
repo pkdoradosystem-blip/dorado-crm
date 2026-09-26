@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_service.dart';
 import 'permission_management_page.dart';
+import 'user_management_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final AuthService authService;
@@ -165,13 +166,20 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 8),
 
             _SettingTile(
-              icon: Icons.manage_accounts_outlined,
-              title: 'User Management',
-              subtitle:
-                  'Add, edit, activate or deactivate users',
-              onTap: () =>
-                  _comingSoon('User Management'),
-            ),
+  icon: Icons.manage_accounts_outlined,
+  title: 'User Management',
+  subtitle: 'Add, edit, activate or deactivate users',
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserManagementPage(
+          apiClient: widget.authService.apiClient,
+        ),
+      ),
+    );
+  },
+),
 
            _SettingTile(
   icon: Icons.security_outlined,

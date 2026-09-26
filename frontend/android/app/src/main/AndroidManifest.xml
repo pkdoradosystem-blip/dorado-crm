@@ -1,7 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Required for Dorado CRM to connect to FastAPI backend -->
+    <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- For older Android gallery/file access -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Android 13+ image access -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
         android:label="Dorado CRM"
@@ -30,14 +45,12 @@
 
         </activity>
 
-        <!-- Required by Flutter -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
 
-    <!-- Required to query activities that can process text -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

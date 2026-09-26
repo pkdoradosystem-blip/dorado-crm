@@ -1,4 +1,8 @@
-2026/09/18-06:17:11.650 3fc8 Reusing MANIFEST C:\Users\DORADO\AppData\Local\Temp\flutter_tools.d53afa0\flutter_tools_chrome_device.fb91b043\Default\shared_proto_db/MANIFEST-000001
-2026/09/18-06:17:11.650 3fc8 Recovering log #4
-2026/09/18-06:17:11.651 3fc8 Reusing old log C:\Users\DORADO\AppData\Local\Temp\flutter_tools.d53afa0\flutter_tools_chrome_device.fb91b043\Default\shared_proto_db/000004.log 
-2026/09/18-06:17:11.651 3fc8 Delete type=0 #3
+2026/09/24-23:46:42.008 2e9c Reusing MANIFEST C:\Users\DORADO\AppData\Local\Temp\flutter_tools.34200e5d\flutter_tools_chrome_device.bf927905\Default\shared_proto_db/MANIFEST-000001
+2026/09/24-23:46:42.009 2e9c Recovering log #7
+2026/09/24-23:46:42.010 2e9c Reusing old log C:\Users\DORADO\AppData\Local\Temp\flutter_tools.34200e5d\flutter_tools_chrome_device.bf927905\Default\shared_proto_db/000007.log 
+2026/09/24-23:46:42.011 2e9c Delete type=0 #3
+2026/09/24-23:46:42.011 2e9c Delete type=0 #4
+2026/09/24-23:46:54.807 1bbc Level-0 table #11: started
+2026/09/24-23:46:54.810 1bbc Level-0 table #11: 135085 bytes OK
+2026/09/24-23:46:54.812 1bbc Delete type=0 #7
