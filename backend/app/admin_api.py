@@ -120,7 +120,7 @@ def normalize_date_value(value):
     except ValueError:
         return None
 
-    PASSWORD_RESET_TOKEN_MINUTES = 10
+PASSWORD_RESET_TOKEN_MINUTES = 10
 
 
 def create_password_reset_token(user_id: str) -> str:
@@ -666,8 +666,6 @@ def forgot_password_reset(
         "success": True,
         "message": "Password reset successfully",
     }
-
-
 
 @router.post("/auth/login")
 def login(
@@ -2861,4 +2859,53 @@ def user_form_options(
             }
             for row in employees
         ],
+    }
+# =========================================================
+# TEMPORARY: INITIAL SECURITY SETUP FOR EM01
+# DELETE THIS ENDPOINT AFTER SUCCESSFUL SETUP
+# =========================================================
+
+@router.post("/setup/em01-security")
+def setup_em01_security(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(EmployeeMaster)
+        .filter(EmployeeMaster.id == "EM01")
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="EM01 not found",
+        )
+
+    # This temporary endpoint can only initialize once.
+    if row.date_of_birth and row.security_pet_name_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="Security details already initialized",
+        )
+
+    dob = normalize_date_value(payload.get("date_of_birth"))
+    pet_name = str(payload.get("pet_name") or "").strip()
+
+    if not dob or not pet_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Date of birth and pet name are required",
+        )
+
+    row.date_of_birth = dob
+    row.security_pet_name_hash = create_password_hash(
+        pet_name.lower()
+    )
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "EM01 security details initialized",
     }
