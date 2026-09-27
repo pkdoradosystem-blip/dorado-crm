@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pwdlib import PasswordHash
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -517,19 +518,69 @@ def forgot_password_verify(
     if not login or not date_of_birth or not pet_name:
         raise HTTPException(
             status_code=400,
-            detail="Employee ID/Mobile, Date of Birth and Pet Name are required",
+            detail=(
+                "Employee ID/Mobile/Email, Date of Birth "
+                "and Pet Name are required"
+            ),
         )
+
+    # --------------------------------------------------
+    # Find employee by Employee ID / Mobile / Email
+    # --------------------------------------------------
 
     user = (
         db.query(EmployeeMaster)
-        .filter(
-            (EmployeeMaster.id == login)
-            | (EmployeeMaster.mobile == login)
-        )
+        .filter(EmployeeMaster.id == login)
         .first()
     )
 
-    # Same message for all verification failures
+    # Try registered mobile number.
+    # Compare digits only so +91, spaces, dashes etc. do not matter.
+    if user is None:
+        login_digits = "".join(
+            ch for ch in login if ch.isdigit()
+        )
+
+        if login_digits:
+            employees = (
+                db.query(EmployeeMaster)
+                .filter(EmployeeMaster.active == True)
+                .all()
+            )
+
+            for employee in employees:
+                stored_mobile = str(
+                    employee.mobile or ""
+                )
+
+                stored_digits = "".join(
+                    ch for ch in stored_mobile if ch.isdigit()
+                )
+
+                # Match exact digits or last 10 digits.
+                if (
+                    stored_digits == login_digits
+                    or (
+                        len(stored_digits) >= 10
+                        and len(login_digits) >= 10
+                        and stored_digits[-10:] == login_digits[-10:]
+                    )
+                ):
+                    user = employee
+                    break
+
+    # Try registered email.
+    if user is None:
+        user = (
+            db.query(EmployeeMaster)
+            .filter(
+                func.lower(EmployeeMaster.email)
+                == login.lower()
+            )
+            .first()
+        )
+
+    # Same generic message for every verification failure.
     if user is None or not user.active:
         raise HTTPException(
             status_code=400,

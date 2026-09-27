@@ -91,51 +91,111 @@ class AuthService {
     }
   }
 
-Future<void> changePassword({
-  required String currentPassword,
-  required String newPassword,
-}) async {
-  final response = await apiClient.post(
-    '/api/v1/auth/change-password',
-    {
-      'old_password': currentPassword,
-      'new_password': newPassword,
-    },
-  );
-
-  if (response is! Map) {
-    throw Exception('Invalid password change response');
-  }
-
-  final data = Map<String, dynamic>.from(response);
-
-  // Backend returns the updated user.
-  final userRaw = data['user'];
-
-  if (userRaw is Map) {
-    final user = Map<String, dynamic>.from(userRaw);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _userKey,
-      jsonEncode(user),
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await apiClient.post(
+      '/api/v1/auth/change-password',
+      {
+        'old_password': currentPassword,
+        'new_password': newPassword,
+      },
     );
-  } else {
-    // If backend does not return user,
-    // update the locally saved force-reset flag.
-    final currentUser = await getSavedUser();
 
-    if (currentUser != null) {
-      currentUser['force_password_reset'] = false;
+    if (response is! Map) {
+      throw Exception('Invalid password change response');
+    }
+
+    final data = Map<String, dynamic>.from(response);
+
+    // Backend returns the updated user.
+    final userRaw = data['user'];
+
+    if (userRaw is Map) {
+      final user = Map<String, dynamic>.from(userRaw);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         _userKey,
-        jsonEncode(currentUser),
+        jsonEncode(user),
+      );
+    } else {
+      // If backend does not return user,
+      // update the locally saved force-reset flag.
+      final currentUser = await getSavedUser();
+
+      if (currentUser != null) {
+        currentUser['force_password_reset'] = false;
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _userKey,
+          jsonEncode(currentUser),
+        );
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyForgotPassword({
+    required String login,
+    required String dateOfBirth,
+    required String petName,
+  }) async {
+    final response = await apiClient.post(
+      '/api/v1/auth/forgot-password/verify',
+      {
+        'login': login.trim(),
+        'date_of_birth': dateOfBirth.trim(),
+        'pet_name': petName.trim(),
+      },
+    );
+
+    if (response is! Map) {
+      throw Exception('Invalid verification response');
+    }
+
+    final data = Map<String, dynamic>.from(response);
+
+    if (data['verified'] != true) {
+      throw Exception('Unable to verify employee details');
+    }
+
+    final resetToken = data['reset_token']?.toString();
+
+    if (resetToken == null || resetToken.isEmpty) {
+      throw Exception('Reset token not received');
+    }
+
+    return data;
+  }
+
+  Future<void> resetForgotPassword({
+    required String resetToken,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final response = await apiClient.post(
+      '/api/v1/auth/forgot-password/reset',
+      {
+        'reset_token': resetToken,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+    );
+
+    if (response is! Map) {
+      throw Exception('Invalid password reset response');
+    }
+
+    final data = Map<String, dynamic>.from(response);
+
+    if (data['success'] != true) {
+      throw Exception(
+        data['message']?.toString() ?? 'Password reset failed',
       );
     }
   }
-}
 
   Future<void> logout() async {
     try {

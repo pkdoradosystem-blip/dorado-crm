@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_service.dart';
+import 'forgot_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   final AuthService authService;
@@ -52,9 +53,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       setState(() {
-        _error = e
-            .toString()
-            .replaceFirst('Exception: ', '');
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) {
@@ -81,8 +80,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: Form(
                     key: _formKey,
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Icon(
                           Icons.apartment_rounded,
@@ -107,72 +105,75 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 30),
-
                         TextFormField(
                           controller: _loginController,
-                          textInputAction:
-                              TextInputAction.next,
+                          textInputAction: TextInputAction.next,
                           decoration: const InputDecoration(
-                            labelText:
-                                'Mobile / Employee ID / Email',
-                            prefixIcon:
-                                Icon(Icons.person_outline),
+                            labelText: 'Mobile / Employee ID / Email',
+                            prefixIcon: Icon(Icons.person_outline),
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
-                            if (value == null ||
-                                value.trim().isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return 'Enter login ID';
                             }
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 16),
-
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           onFieldSubmitted: (_) => _login(),
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            prefixIcon:
-                                const Icon(Icons.lock_outline),
-                            border:
-                                const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(() {
-                                  _obscurePassword =
-                                      !_obscurePassword;
+                                  _obscurePassword = !_obscurePassword;
                                 });
                               },
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility_outlined
-                                    : Icons
-                                        .visibility_off_outlined,
+                                    : Icons.visibility_off_outlined,
                               ),
                             ),
                           ),
                           validator: (value) {
-                            if (value == null ||
-                                value.isEmpty) {
+                            if (value == null || value.isEmpty) {
                               return 'Enter password';
                             }
                             return null;
                           },
                         ),
-
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ForgotPasswordPage(
+                                          authService: widget.authService,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            child: const Text('Forgot Password?'),
+                          ),
+                        ),
                         if (_error != null) ...[
                           const SizedBox(height: 14),
                           Container(
-                            padding:
-                                const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: Colors.red.shade50,
-                              borderRadius:
-                                  BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               _error!,
@@ -182,28 +183,22 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ],
-
                         const SizedBox(height: 22),
-
                         SizedBox(
                           height: 50,
                           child: FilledButton.icon(
-                            onPressed:
-                                _loading ? null : _login,
+                            onPressed: _loading ? null : _login,
                             icon: _loading
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child:
-                                        CircularProgressIndicator(
+                                    child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
                                   )
                                 : const Icon(Icons.login),
                             label: Text(
-                              _loading
-                                  ? 'Signing in...'
-                                  : 'Login',
+                              _loading ? 'Signing in...' : 'Login',
                             ),
                           ),
                         ),
