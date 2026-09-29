@@ -141,6 +141,48 @@ class EmployeeMaster(Base):
     designation = Column(String(100), nullable=True)
     date_of_joining = Column(DateTime, nullable=True)
 
+        # =====================================================
+    # ADDITIONAL EMPLOYMENT INFORMATION
+    # =====================================================
+
+    employee_type = Column(String(50), nullable=True)
+    work_location = Column(String(150), nullable=True)
+    date_of_exit = Column(DateTime, nullable=True)
+
+    # =====================================================
+    # PF / ESIC APPLICABILITY
+    # =====================================================
+
+    pf_applicable = Column(Boolean, default=False, nullable=False)
+    esic_applicable = Column(Boolean, default=False, nullable=False)
+
+    # =====================================================
+    # SALARY INFORMATION
+    # =====================================================
+
+    basic_salary = Column(Float, nullable=True)
+    gross_salary = Column(Float, nullable=True)
+    ctc = Column(Float, nullable=True)
+
+    hra = Column(Float, nullable=True)
+    conveyance_allowance = Column(Float, nullable=True)
+    other_allowance = Column(Float, nullable=True)
+
+    employee_pf_contribution = Column(Float, nullable=True)
+    employer_pf_contribution = Column(Float, nullable=True)
+
+    employee_esic_contribution = Column(Float, nullable=True)
+    employer_esic_contribution = Column(Float, nullable=True)
+
+    # =====================================================
+    # EMERGENCY / PERSONAL
+    # =====================================================
+
+    blood_group = Column(String(20), nullable=True)
+    emergency_contact_name = Column(String(150), nullable=True)
+    emergency_contact_mobile = Column(String(30), nullable=True)
+    emergency_contact_relation = Column(String(50), nullable=True)
+
     active = Column(Boolean, default=True, nullable=False)
 
     # Legacy display-text fields retained for compatibility
@@ -189,6 +231,43 @@ class EmployeeMaster(Base):
     # Only its password-style hash will be stored.
     security_pet_name_hash = Column(String(255), nullable=True)
 
+# =========================================================
+# EMPLOYEE DOCUMENTS
+# =========================================================
+
+class EmployeeDocument(Base):
+    __tablename__ = "employee_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    employee_id = Column(
+        String(30),
+        ForeignKey("employee_master.id"),
+        nullable=False,
+        index=True,
+    )
+
+    document_type = Column(String(100), nullable=False)
+    document_name = Column(String(200), nullable=True)
+
+    document_number = Column(String(100), nullable=True)
+
+    file_url = Column(Text, nullable=True)
+
+    issue_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+
+    remarks = Column(Text, nullable=True)
+
+    active = Column(Boolean, default=True, nullable=False)
+
+    uploaded_by = Column(String(30), nullable=True)
+
+    uploaded_at = Column(
+        DateTime,
+        default=datetime.now,
+        nullable=False,
+    )
 
 # =========================================================
 # ROLE MASTER
