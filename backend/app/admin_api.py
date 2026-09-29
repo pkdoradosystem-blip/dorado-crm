@@ -64,6 +64,22 @@ def model_to_dict(obj):
     }
 
 
+
+def employee_to_dict(row: EmployeeMaster):
+    data = model_to_dict(row)
+
+    # Never expose authentication/security values
+    data.pop("password", None)
+    data.pop("security_pet_name_hash", None)
+
+    # Stable frontend aliases
+    data["role"] = row.app_role
+    data["role_name"] = row.app_role
+    data["department_name"] = row.department
+    data["reporting_manager_name"] = row.reporting_manager
+
+    return data
+
 def audit(
     db: Session,
     user_id: str | None,
@@ -1600,13 +1616,69 @@ class CreateUserRequest(BaseModel):
     employee_name: str
     password: str
 
+    # Personal
+    father_name: str | None = None
+    date_of_birth: datetime | None = None
+    gender: str | None = None
+    blood_group: str | None = None
+
     mobile: str | None = None
+    alternate_mobile: str | None = None
     email: str | None = None
+
+    present_address: str | None = None
+    permanent_address: str | None = None
+
+    emergency_contact_name: str | None = None
+    emergency_contact_mobile: str | None = None
+    emergency_contact_relation: str | None = None
+
+    # Employment
     designation: str | None = None
+    date_of_joining: datetime | None = None
+    employee_type: str | None = None
+    work_location: str | None = None
+    date_of_exit: datetime | None = None
 
     department_id: str | None = None
     role_id: str | None = None
     reporting_manager_id: str | None = None
+
+    # Identity
+    aadhaar_number: str | None = None
+    pan_number: str | None = None
+
+    # PF / ESIC
+    pf_applicable: bool = False
+    esic_applicable: bool = False
+
+    uan_number: str | None = None
+    pf_number: str | None = None
+    esic_number: str | None = None
+
+    # Salary
+    basic_salary: float | None = None
+    gross_salary: float | None = None
+    ctc: float | None = None
+
+    hra: float | None = None
+    conveyance_allowance: float | None = None
+    other_allowance: float | None = None
+
+    employee_pf_contribution: float | None = None
+    employer_pf_contribution: float | None = None
+    employee_esic_contribution: float | None = None
+    employer_esic_contribution: float | None = None
+
+    # Bank
+    bank_name: str | None = None
+    bank_account_holder_name: str | None = None
+    bank_account_number: str | None = None
+    bank_ifsc: str | None = None
+    bank_branch: str | None = None
+
+    # Login / Security
+    pet_name: str | None = None
 
     active: bool = True
     force_password_reset: bool = True
@@ -1633,14 +1705,7 @@ def list_users(
         .all()
     )
 
-    result = []
-
-    for row in rows:
-        data = model_to_dict(row)
-        data.pop("password", None)
-        result.append(data)
-
-    return result
+    return [employee_to_dict(row) for row in rows]
 
 @router.get("/admin/next-user-id")
 def get_next_user_id(
@@ -1729,31 +1794,63 @@ def create_user(
         id=user_id,
         employee_name=employee_name,
 
-        # Basic Information
+        # Personal
         father_name=payload.get("father_name"),
         date_of_birth=payload.get("date_of_birth"),
         gender=payload.get("gender"),
+        blood_group=payload.get("blood_group"),
+
         mobile=payload.get("mobile"),
         alternate_mobile=payload.get("alternate_mobile"),
         email=payload.get("email"),
 
-        # Address
         present_address=payload.get("present_address"),
         permanent_address=payload.get("permanent_address"),
 
+        emergency_contact_name=payload.get("emergency_contact_name"),
+        emergency_contact_mobile=payload.get("emergency_contact_mobile"),
+        emergency_contact_relation=payload.get("emergency_contact_relation"),
+
         # Employment
         designation=payload.get("designation"),
-        active=bool(payload.get("active", True)),
         date_of_joining=payload.get("date_of_joining") or now_local(),
+        employee_type=payload.get("employee_type"),
+        work_location=payload.get("work_location"),
+        date_of_exit=payload.get("date_of_exit"),
+
+        active=bool(payload.get("active", True)),
 
         # Identity
         aadhaar_number=payload.get("aadhaar_number"),
         pan_number=payload.get("pan_number"),
 
         # PF / ESIC
+        pf_applicable=bool(payload.get("pf_applicable", False)),
+        esic_applicable=bool(payload.get("esic_applicable", False)),
         uan_number=payload.get("uan_number"),
         pf_number=payload.get("pf_number"),
         esic_number=payload.get("esic_number"),
+
+        # Salary
+        basic_salary=payload.get("basic_salary"),
+        gross_salary=payload.get("gross_salary"),
+        ctc=payload.get("ctc"),
+        hra=payload.get("hra"),
+        conveyance_allowance=payload.get("conveyance_allowance"),
+        other_allowance=payload.get("other_allowance"),
+
+        employee_pf_contribution=payload.get(
+            "employee_pf_contribution"
+        ),
+        employer_pf_contribution=payload.get(
+            "employer_pf_contribution"
+        ),
+        employee_esic_contribution=payload.get(
+            "employee_esic_contribution"
+        ),
+        employer_esic_contribution=payload.get(
+            "employer_esic_contribution"
+        ),
 
         # Bank
         bank_name=payload.get("bank_name"),
@@ -1772,7 +1869,7 @@ def create_user(
             payload.get("force_password_reset", True)
         ),
 
-        # Forgot Password Security
+        # Security answer â€” never save plain Pet Name
         security_pet_name_hash=(
             create_password_hash(pet_name.lower())
             if pet_name
@@ -1796,10 +1893,7 @@ def create_user(
     db.commit()
     db.refresh(row)
 
-    data = model_to_dict(row)
-    data.pop("password", None)
-
-    return data
+    return employee_to_dict(row)
 
 
 @router.put("/admin/users/{user_id}")
@@ -1894,13 +1988,7 @@ def update_user(
     db.commit()
     db.refresh(row)
 
-    data = model_to_dict(row)
-
-    # Never expose security values through API response
-    data.pop("password", None)
-    data.pop("security_pet_name_hash", None)
-
-    return 
+    return employee_to_dict(row)
 
 
 @router.delete("/admin/users/{user_id}")
