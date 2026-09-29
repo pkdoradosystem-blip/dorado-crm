@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db, SessionLocal
 from .admin_api import router as admin_router, sync_foundation_data
-from .seed_master_data import seed_master_data
 from .models import (
     Lead,
     LeadActivity,
@@ -56,9 +55,6 @@ app = FastAPI(
 )
 
 app.include_router(admin_router)
-
-seed_master_data()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -726,5 +722,6 @@ def marketing_report(db: Session = Depends(get_db)):
             if lead.order_finalized is True
         ),
     }
+
 
 
