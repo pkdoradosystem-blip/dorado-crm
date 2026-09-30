@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 from typing import Any
 import os
 import uuid
@@ -1869,7 +1869,7 @@ def create_user(
             payload.get("force_password_reset", True)
         ),
 
-        # Security answer â€” never save plain Pet Name
+        # Security answer Ã¢â‚¬â€ never save plain Pet Name
         security_pet_name_hash=(
             create_password_hash(pet_name.lower())
             if pet_name
@@ -2999,3 +2999,4 @@ def user_form_options(
             for row in employees
         ],
     }
+
