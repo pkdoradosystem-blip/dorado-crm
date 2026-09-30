@@ -71,6 +71,7 @@ def employee_to_dict(row: EmployeeMaster):
     # Never expose authentication/security values
     data.pop("password", None)
     data.pop("security_pet_name_hash", None)
+    data.pop("security_pet_name_hash", None)
 
     # Stable frontend aliases
     data["role"] = row.app_role

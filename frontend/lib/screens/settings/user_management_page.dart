@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import 'add_user_page.dart';
+import 'employee_profile_page.dart';
 
 class UserManagementPage extends StatefulWidget {
   final ApiClient apiClient;
@@ -12,12 +13,10 @@ class UserManagementPage extends StatefulWidget {
   });
 
   @override
-  State<UserManagementPage> createState() =>
-      _UserManagementPageState();
+  State<UserManagementPage> createState() => _UserManagementPageState();
 }
 
-class _UserManagementPageState
-    extends State<UserManagementPage> {
+class _UserManagementPageState extends State<UserManagementPage> {
   bool _loading = true;
   String? _error;
 
@@ -70,9 +69,7 @@ class _UserManagementPageState
 
       setState(() {
         _loading = false;
-        _error = e
-            .toString()
-            .replaceFirst('Exception: ', '');
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -84,8 +81,7 @@ class _UserManagementPageState
     for (final key in keys) {
       final value = user[key];
 
-      if (value != null &&
-          value.toString().trim().isNotEmpty) {
+      if (value != null && value.toString().trim().isNotEmpty) {
         return value.toString();
       }
     }
@@ -94,9 +90,7 @@ class _UserManagementPageState
   }
 
   bool _isActive(Map<String, dynamic> user) {
-    final value = user['active'] ??
-        user['is_active'] ??
-        user['Active'];
+    final value = user['active'] ?? user['is_active'] ?? user['Active'];
 
     if (value is bool) {
       return value;
@@ -116,89 +110,6 @@ class _UserManagementPageState
         text == 'active';
   }
 
-  void _showUser(Map<String, dynamic> user) {
-    final id = _text(
-      user,
-      ['id', 'user_id', 'employee_id'],
-    );
-
-    final name = _text(
-      user,
-      ['employee_name', 'name'],
-    );
-
-    final mobile = _text(
-      user,
-      ['mobile', 'phone'],
-    );
-
-    final designation = _text(
-      user,
-      ['designation'],
-    );
-
-    final role = _text(
-      user,
-      ['role', 'app_role', 'role_name'],
-    );
-
-    final department = _text(
-      user,
-      ['department', 'department_name'],
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            name.isEmpty ? id : name,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              _DetailRow(
-                label: 'Employee ID',
-                value: id,
-              ),
-              _DetailRow(
-                label: 'Mobile',
-                value: mobile,
-              ),
-              _DetailRow(
-                label: 'Designation',
-                value: designation,
-              ),
-              _DetailRow(
-                label: 'Role',
-                value: role,
-              ),
-              _DetailRow(
-                label: 'Department',
-                value: department,
-              ),
-              _DetailRow(
-                label: 'Status',
-                value: _isActive(user)
-                    ? 'Active'
-                    : 'Inactive',
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -207,28 +118,26 @@ class _UserManagementPageState
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _loading
-                ? null
-                : _loadUsers,
+            onPressed: _loading ? null : _loadUsers,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-  final created = await Navigator.push<bool>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => AddUserPage(
-        apiClient: widget.apiClient,
-      ),
-    ),
-  );
+          final created = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddUserPage(
+                apiClient: widget.apiClient,
+              ),
+            ),
+          );
 
-  if (created == true) {
-    await _loadUsers();
-  }
-},
+          if (created == true) {
+            await _loadUsers();
+          }
+        },
         icon: const Icon(Icons.person_add_alt_1),
         label: const Text('Add User'),
       ),
@@ -309,8 +218,7 @@ class _UserManagementPageState
           90,
         ),
         itemCount: _users.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(height: 8),
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final user = _users[index];
 
@@ -341,28 +249,34 @@ class _UserManagementPageState
 
           final active = _isActive(user);
 
-          final initial = name.isNotEmpty
-              ? name.substring(0, 1).toUpperCase()
-              : '?';
+          final initial =
+              name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
 
           return Card(
             elevation: 0,
             child: ListTile(
-              onTap: () => _showUser(user),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EmployeeProfilePage(
+                      apiClient: widget.apiClient,
+                      user: user,
+                    ),
+                  ),
+                );
+              },
               leading: CircleAvatar(
                 child: Text(initial),
               ),
               title: Text(
-                name.isEmpty
-                    ? 'Unnamed User'
-                    : name,
+                name.isEmpty ? 'Unnamed User' : name,
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                 ),
               ),
               subtitle: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 4),
                   Text(
@@ -371,36 +285,25 @@ class _UserManagementPageState
                       role,
                     ]
                         .where(
-                          (value) =>
-                              value.isNotEmpty,
+                          (value) => value.isNotEmpty,
                         )
-                        .join(' • '),
+                        .join(' | '),
                   ),
-                  if (mobile.isNotEmpty)
-                    Text(mobile),
+                  if (mobile.isNotEmpty) Text(mobile),
                 ],
               ),
               trailing: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    active
-                        ? Icons.check_circle
-                        : Icons.cancel,
-                    color: active
-                        ? Colors.green
-                        : Colors.red,
+                    active ? Icons.check_circle : Icons.cancel,
+                    color: active ? Colors.green : Colors.red,
                   ),
                   Text(
-                    active
-                        ? 'Active'
-                        : 'Inactive',
+                    active ? 'Active' : 'Inactive',
                     style: TextStyle(
                       fontSize: 11,
-                      color: active
-                          ? Colors.green
-                          : Colors.red,
+                      color: active ? Colors.green : Colors.red,
                     ),
                   ),
                 ],
@@ -408,45 +311,6 @@ class _UserManagementPageState
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (value.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(value),
-          ),
-        ],
       ),
     );
   }
