@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import os
 import uuid
@@ -1901,12 +1901,12 @@ def create_user(
 def update_user(
     user_id: str,
     payload: dict[str, Any],
-    current_user: EmployeeMaster = Depends(get_current_user),
+    user: EmployeeMaster = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     require_permission(
         db,
-        current_user,
+        user,
         "user_management",
         "edit",
     )
@@ -1924,62 +1924,77 @@ def update_user(
         )
 
     editable = {
+        # Personal
         "employee_name",
         "father_name",
         "date_of_birth",
         "gender",
+        "blood_group",
         "mobile",
         "alternate_mobile",
         "email",
         "present_address",
         "permanent_address",
+        "emergency_contact_name",
+        "emergency_contact_mobile",
+        "emergency_contact_relation",
+
+        # Employment
         "designation",
         "date_of_joining",
+        "employee_type",
+        "work_location",
+        "date_of_exit",
+        "active",
+        "force_password_reset",
+
+        # Identity
         "aadhaar_number",
         "pan_number",
+
+        # PF / ESIC
+        "pf_applicable",
+        "esic_applicable",
         "uan_number",
         "pf_number",
         "esic_number",
+
+        # Salary
+        "basic_salary",
+        "gross_salary",
+        "ctc",
+        "hra",
+        "conveyance_allowance",
+        "other_allowance",
+        "employee_pf_contribution",
+        "employer_pf_contribution",
+        "employee_esic_contribution",
+        "employer_esic_contribution",
+
+        # Bank
         "bank_name",
         "bank_account_holder_name",
         "bank_account_number",
         "bank_ifsc",
         "bank_branch",
-        "active",
-        "force_password_reset",
     }
 
-    for key, value in payload.items():
-        if key in editable:
-            setattr(row, key, value)
+    # Apply normal EmployeeMaster fields.
+    for key in editable:
+        if key in payload:
+            setattr(row, key, payload[key])
 
-    apply_user_master_refs(db, row, payload)
-
-    # Update Pet Name securely.
-    # Plain pet name is never stored in the database.
-    if "pet_name" in payload:
-        pet_name = str(payload.get("pet_name") or "").strip()
-
-        if pet_name:
-            row.security_pet_name_hash = create_password_hash(
-                pet_name.lower()
-            )
-
-    # Optional password update
-    if payload.get("password"):
-        password = str(payload["password"])
-
-        if len(password) < 6:
-            raise HTTPException(
-                status_code=400,
-                detail="Password must be at least 6 characters",
-            )
-
-        row.password = create_password_hash(password)
+    # Resolve Department / Role / Reporting Manager
+    # using the existing master-reference logic.
+    apply_user_master_refs(
+        db,
+        row,
+        payload,
+    )
 
     audit(
         db,
-        current_user.id,
+        user.id,
         "EDIT",
         "user_management",
         "EmployeeMaster",
@@ -1989,7 +2004,14 @@ def update_user(
     db.commit()
     db.refresh(row)
 
-    return employee_to_dict(row)
+    # Build response from the row AFTER PostgreSQL commit/refresh.
+    data = model_to_dict(row)
+
+    # Never expose authentication/security data.
+    data.pop("password", None)
+    data.pop("security_pet_name_hash", None)
+
+    return data
 
 
 @router.delete("/admin/users/{user_id}")
