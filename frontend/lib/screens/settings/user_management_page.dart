@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import 'add_user_page.dart';
@@ -265,6 +265,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     ),
                   ),
                 );
+
+                if (!mounted) return;
+                await _loadUsers();
               },
               leading: CircleAvatar(
                 child: Text(initial),

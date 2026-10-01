@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import (
     EmployeeMaster,
+    EmployeeDocument,
     DepartmentMaster,
     RoleMaster,
     ModuleMaster,
@@ -2071,6 +2072,214 @@ def deactivate_user(
     return {
         "success": True,
         "message": "User deactivated successfully",
+    }
+
+
+
+# =========================================================
+# EMPLOYEE DOCUMENTS
+# =========================================================
+
+@router.get("/admin/users/{user_id}/documents")
+def list_employee_documents(
+    user_id: str,
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(db, user, "user_management", "view")
+
+    employee = (
+        db.query(EmployeeMaster)
+        .filter(EmployeeMaster.id == user_id)
+        .first()
+    )
+
+    if employee is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rows = (
+        db.query(EmployeeDocument)
+        .filter(EmployeeDocument.employee_id == user_id)
+        .order_by(EmployeeDocument.uploaded_at.desc())
+        .all()
+    )
+
+    return [model_to_dict(row) for row in rows]
+
+
+@router.post("/admin/users/{user_id}/documents")
+def create_employee_document(
+    user_id: str,
+    payload: dict[str, Any],
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(db, user, "user_management", "add")
+
+    employee = (
+        db.query(EmployeeMaster)
+        .filter(EmployeeMaster.id == user_id)
+        .first()
+    )
+
+    if employee is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    document_type = str(
+        payload.get("document_type") or ""
+    ).strip()
+
+    if not document_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Document Type is required",
+        )
+
+    row = EmployeeDocument(
+        employee_id=user_id,
+        document_type=document_type,
+        document_name=(
+            str(payload.get("document_name") or "").strip() or None
+        ),
+        document_number=(
+            str(payload.get("document_number") or "").strip() or None
+        ),
+        file_url=(
+            str(payload.get("file_url") or "").strip() or None
+        ),
+        remarks=(
+            str(payload.get("remarks") or "").strip() or None
+        ),
+        active=bool(payload.get("active", True)),
+        uploaded_by=user.id,
+        uploaded_at=now_local(),
+    )
+
+    db.add(row)
+
+    audit(
+        db,
+        user.id,
+        "ADD",
+        "user_management",
+        "EmployeeDocument",
+        user_id,
+        document_type,
+    )
+
+    db.commit()
+    db.refresh(row)
+
+    return model_to_dict(row)
+
+
+@router.put("/admin/users/{user_id}/documents/{document_id}")
+def update_employee_document(
+    user_id: str,
+    document_id: int,
+    payload: dict[str, Any],
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(db, user, "user_management", "edit")
+
+    row = (
+        db.query(EmployeeDocument)
+        .filter(
+            EmployeeDocument.id == document_id,
+            EmployeeDocument.employee_id == user_id,
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee document not found",
+        )
+
+    editable = {
+        "document_type",
+        "document_name",
+        "document_number",
+        "file_url",
+        "remarks",
+        "active",
+    }
+
+    for key in editable:
+        if key in payload:
+            value = payload[key]
+
+            if key == "active":
+                setattr(row, key, bool(value))
+            else:
+                value = str(value or "").strip() or None
+                setattr(row, key, value)
+
+    if not str(row.document_type or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Document Type is required",
+        )
+
+    audit(
+        db,
+        user.id,
+        "EDIT",
+        "user_management",
+        "EmployeeDocument",
+        str(document_id),
+        user_id,
+    )
+
+    db.commit()
+    db.refresh(row)
+
+    return model_to_dict(row)
+
+
+@router.delete("/admin/users/{user_id}/documents/{document_id}")
+def deactivate_employee_document(
+    user_id: str,
+    document_id: int,
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(db, user, "user_management", "delete")
+
+    row = (
+        db.query(EmployeeDocument)
+        .filter(
+            EmployeeDocument.id == document_id,
+            EmployeeDocument.employee_id == user_id,
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee document not found",
+        )
+
+    row.active = False
+
+    audit(
+        db,
+        user.id,
+        "DEACTIVATE",
+        "user_management",
+        "EmployeeDocument",
+        str(document_id),
+        user_id,
+    )
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Employee document deactivated successfully",
     }
 
 
