@@ -1,4 +1,5 @@
-﻿from datetime import datetime
+﻿from .bulk_import_api import router as bulk_import_router
+from datetime import datetime
 from typing import Any
 import uuid
 
@@ -723,5 +724,6 @@ def marketing_report(db: Session = Depends(get_db)):
         ),
     }
 
-
+# Common Bulk Import API
+app.include_router(bulk_import_router)
 

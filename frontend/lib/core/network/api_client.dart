@@ -30,8 +30,7 @@ class ApiClient {
 
     return {
       if (includeJson) 'Content-Type': 'application/json',
-      if (token != null && token.isNotEmpty)
-        'Authorization': 'Bearer $token',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
   }
 
@@ -79,6 +78,45 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<dynamic> multipartPost(
+    String path, {
+    required List<int> fileBytes,
+    required String fileName,
+    String fileField = 'file',
+    Map<String, String>? fields,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}$path'),
+    );
+
+    final token = await getToken();
+
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fileField,
+        fileBytes,
+        filename: fileName,
+      ),
+    );
+
+    final streamedResponse = await request.send();
+
+    final response = await http.Response.fromStream(
+      streamedResponse,
+    );
+
+    return _decode(response);
+  }
+
   dynamic _decode(http.Response response) {
     dynamic data;
 
@@ -90,8 +128,7 @@ class ApiClient {
       }
     }
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'API ${response.statusCode}';
 
       if (data is Map && data['detail'] != null) {

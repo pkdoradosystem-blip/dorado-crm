@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-
+import 'data_master_page.dart';
+import 'bulk_data_upload_page.dart';
 import '../../core/auth/auth_service.dart';
 import 'permission_management_page.dart';
 import 'user_management_page.dart';
@@ -15,8 +16,7 @@ class SettingsPage extends StatefulWidget {
   });
 
   @override
-  State<SettingsPage> createState() =>
-      _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -40,9 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool get _isAdmin {
     final role =
-        (_user?['role'] ?? _user?['app_role'] ?? '')
-            .toString()
-            .toLowerCase();
+        (_user?['role'] ?? _user?['app_role'] ?? '').toString().toLowerCase();
 
     return role == 'admin';
   }
@@ -58,13 +56,11 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(context, true),
               child: const Text('Logout'),
             ),
           ],
@@ -97,15 +93,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final name =
-        (_user?['employee_name'] ?? 'Dorado User')
-            .toString();
+    final name = (_user?['employee_name'] ?? 'Dorado User').toString();
 
     final id = (_user?['id'] ?? '').toString();
 
-    final role =
-        (_user?['role'] ?? _user?['app_role'] ?? '')
-            .toString();
+    final role = (_user?['role'] ?? _user?['app_role'] ?? '').toString();
 
     return Scaffold(
       appBar: AppBar(
@@ -127,8 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           name,
@@ -143,7 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               .where(
                                 (e) => e.isNotEmpty,
                               )
-                              .join(' • '),
+                              .join(' | '),
                         ),
                       ],
                     ),
@@ -152,9 +143,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-
           const SizedBox(height: 18),
-
           if (_isAdmin) ...[
             const Text(
               'Administration',
@@ -164,58 +153,72 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 8),
-
             _SettingTile(
-  icon: Icons.manage_accounts_outlined,
-  title: 'User Management',
-  subtitle: 'Add, edit, activate or deactivate users',
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UserManagementPage(
-          apiClient: widget.authService.apiClient,
-        ),
-      ),
-    );
-  },
-),
-
-           _SettingTile(
-  icon: Icons.security_outlined,
-  title: 'User Permissions',
-  subtitle: 'Control View, Add, Edit and Delete',
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const PermissionManagementPage(),
-      ),
-    );
-  },
-),
-
+              icon: Icons.manage_accounts_outlined,
+              title: 'User Management',
+              subtitle: 'Add, edit, activate or deactivate users',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserManagementPage(
+                      apiClient: widget.authService.apiClient,
+                    ),
+                  ),
+                );
+              },
+            ),
+            _SettingTile(
+              icon: Icons.security_outlined,
+              title: 'User Permissions',
+              subtitle: 'Control View, Add, Edit and Delete',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PermissionManagementPage(),
+                  ),
+                );
+              },
+            ),
             _SettingTile(
               icon: Icons.badge_outlined,
               title: 'Roles & Departments',
-              subtitle:
-                  'Department, role and reporting structure',
-              onTap: () =>
-                  _comingSoon('Roles & Departments'),
+              subtitle: 'Department, role and reporting structure',
+              onTap: () => _comingSoon('Roles & Departments'),
             ),
-
             _SettingTile(
               icon: Icons.dataset_outlined,
               title: 'Data Master',
-              subtitle:
-                  'Single & bulk master data entry',
-              onTap: () =>
-                  _comingSoon('Data Master'),
+              subtitle: 'Add, edit and manage master data',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DataMasterPage(
+                      apiClient: widget.authService.apiClient,
+                    ),
+                  ),
+                );
+              },
             ),
-
+            _SettingTile(
+              icon: Icons.upload_file_outlined,
+              title: 'Bulk Data Upload',
+              subtitle: 'Import Excel data with preview and validation',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BulkDataUploadPage(
+                      apiClient: widget.authService.apiClient,
+                    ),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 20),
           ],
-
           const Text(
             'Account',
             style: TextStyle(
@@ -224,33 +227,26 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 8),
-
           _SettingTile(
             icon: Icons.lock_outline,
             title: 'Change Password',
             subtitle: 'Change your login password',
-            onTap: () =>
-                _comingSoon('Change Password'),
+            onTap: () => _comingSoon('Change Password'),
           ),
-
           _SettingTile(
             icon: Icons.info_outline,
             title: 'App Information',
             subtitle: 'Dorado CRM v1.0.0',
-            onTap: () =>
-                _comingSoon('App Information'),
+            onTap: () => _comingSoon('App Information'),
           ),
-
           const SizedBox(height: 20),
-
           OutlinedButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout),
             label: const Text('Logout'),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.red,
-              minimumSize:
-                  const Size(double.infinity, 50),
+              minimumSize: const Size(double.infinity, 50),
             ),
           ),
         ],
@@ -289,8 +285,7 @@ class _SettingTile extends StatelessWidget {
           ),
         ),
         subtitle: Text(subtitle),
-        trailing:
-            const Icon(Icons.chevron_right),
+        trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );
