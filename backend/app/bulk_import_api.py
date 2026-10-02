@@ -490,69 +490,71 @@ async def execute_bulk_import(
             continue
 
         try:
-            existing = (
-                db.query(MasterData)
-                .filter(
-                    MasterData.master_type_id == master_type.id,
-                    func.upper(MasterData.code)
-                    == item["code"].upper(),
+            # Each Excel row gets its own database savepoint.
+            # If this row fails, only this row is rolled back.
+            with db.begin_nested():
+                existing = (
+                    db.query(MasterData)
+                    .filter(
+                        MasterData.master_type_id == master_type.id,
+                        func.upper(MasterData.code)
+                        == item["code"].upper(),
+                    )
+                    .first()
                 )
-                .first()
-            )
 
-            if existing:
-                if not update_existing:
-                    skipped += 1
+                if existing:
+                    if not update_existing:
+                        skipped += 1
+                        results.append({
+                            **item,
+                            "action": "SKIP",
+                        })
+                        continue
+
+                    existing.name = item["name"]
+                    existing.display_order = item["display_order"]
+                    existing.active = item["active"]
+
+                    if item["department_id"] is not None:
+                        existing.department_id = item["department_id"]
+
+                    if hasattr(existing, "updated_at"):
+                        existing.updated_at = now_local()
+
+                    updated += 1
+
                     results.append({
                         **item,
-                        "action": "SKIP",
+                        "action": "UPDATED",
                     })
-                    continue
 
-                existing.name = item["name"]
-                existing.display_order = item["display_order"]
-                existing.active = item["active"]
+                else:
+                    new_row = MasterData(
+                        master_type_id=master_type.id,
+                        department_id=item["department_id"],
+                        code=item["code"],
+                        name=item["name"],
+                        display_order=item["display_order"],
+                        active=item["active"],
+                    )
 
-                if item["department_id"] is not None:
-                    existing.department_id = item["department_id"]
+                    if hasattr(new_row, "created_at"):
+                        new_row.created_at = now_local()
 
-                if hasattr(existing, "updated_at"):
-                    existing.updated_at = now_local()
+                    if hasattr(new_row, "updated_at"):
+                        new_row.updated_at = now_local()
 
-                updated += 1
+                    db.add(new_row)
 
-                results.append({
-                    **item,
-                    "action": "UPDATED",
-                })
+                    created += 1
 
-            else:
-                new_row = MasterData(
-                    master_type_id=master_type.id,
-                    department_id=item["department_id"],
-                    code=item["code"],
-                    name=item["name"],
-                    display_order=item["display_order"],
-                    active=item["active"],
-                )
-
-                if hasattr(new_row, "created_at"):
-                    new_row.created_at = now_local()
-
-                if hasattr(new_row, "updated_at"):
-                    new_row.updated_at = now_local()
-
-                db.add(new_row)
-
-                created += 1
-
-                results.append({
-                    **item,
-                    "action": "CREATED",
-                })
+                    results.append({
+                        **item,
+                        "action": "CREATED",
+                    })
 
         except Exception as exc:
-            db.rollback()
             failed += 1
 
             results.append({
@@ -601,3 +603,4 @@ async def execute_bulk_import(
         },
         "results": results,
     }
+
