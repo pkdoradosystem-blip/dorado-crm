@@ -2,7 +2,8 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from openpyxl import load_workbook
+from fastapi.responses import Response
+from openpyxl import load_workbook, Workbook
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -343,6 +344,190 @@ def bulk_master_types(
     ]
 
 
+
+@router.get("/template")
+def download_bulk_import_template(
+    import_type: str,
+    master_type_id: str | None = None,
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(db, user, "data_master", "view")
+
+    import_type = import_type.strip().upper()
+
+    if import_type not in SUPPORTED_IMPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported import type",
+        )
+
+    wb = Workbook()
+    ws = wb.active
+
+    if import_type == "MASTER_DATA":
+        master_type = get_master_type(db, master_type_id)
+
+        safe_name = (
+            master_type.master_name
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(" ", "_")
+        )
+
+        ws.title = safe_name[:31]
+
+        headers = [
+            "code",
+            "name",
+            "display_order",
+            "active",
+            "department_id",
+        ]
+
+        filename = f"{safe_name}_Import_Template.xlsx"
+
+    elif import_type == "EMPLOYEE":
+        ws.title = "Employee"
+
+        headers = [
+            "employee_id",
+            "employee_name",
+            "father_name",
+            "date_of_birth",
+            "gender",
+            "mobile",
+            "alternate_mobile",
+            "email",
+            "designation",
+            "department_id",
+            "role_id",
+            "reporting_manager_id",
+            "date_of_joining",
+            "employee_type",
+            "work_location",
+            "active",
+            "blood_group",
+            "emergency_contact_name",
+            "emergency_contact_mobile",
+            "emergency_contact_relation",
+            "pf_applicable",
+            "esic_applicable",
+            "uan",
+            "pf_number",
+            "esic_number",
+            "basic_salary",
+            "hra",
+            "conveyance_allowance",
+            "other_allowance",
+            "gross_salary",
+            "ctc",
+            "bank_name",
+            "account_holder_name",
+            "account_number",
+            "ifsc_code",
+            "bank_branch",
+            "pan_number",
+            "aadhaar_number",
+        ]
+
+        filename = "Employee_User_Import_Template.xlsx"
+
+    elif import_type == "LEAD":
+        ws.title = "Lead"
+
+        headers = [
+            "lead_date",
+            "lead_id",
+            "executive",
+            "lead_source",
+            "customer_name",
+            "mobile",
+            "location",
+            "building_type",
+            "lift_type",
+            "requirement_time",
+            "call_done",
+            "appointment_fixed",
+            "appointment_date",
+            "site_visit_done",
+            "site_visit_date",
+            "survey_done",
+            "survey_date",
+            "quotation_given",
+            "quotation_date",
+            "negotiation_status",
+            "negotiation_date",
+            "order_finalized",
+            "order_date",
+            "order_lost",
+            "lost_date",
+            "lead_status",
+            "remarks",
+            "follow_up_date",
+            "assigned_marketing_head",
+            "lead_priority",
+            "expected_order_value",
+            "expected_close_date",
+            "lost_reason",
+            "active",
+        ]
+
+        filename = "Lead_Import_Template.xlsx"
+
+    else:
+        ws.title = "Customer"
+
+        headers = [
+            "customer_id",
+            "customer_name",
+            "mobile",
+            "alternate_mobile",
+            "email",
+            "address",
+            "location",
+            "building_type",
+            "contact_person",
+            "remarks",
+            "active",
+        ]
+
+        filename = "Customer_Import_Template.xlsx"
+
+    # Header row
+    for column, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=column, value=header)
+        cell.font = cell.font.copy(bold=True)
+
+        width = max(15, min(len(header) + 5, 30))
+        ws.column_dimensions[cell.column_letter].width = width
+
+    ws.freeze_panes = "A2"
+
+    # Helpful example row only for Master Data
+    if import_type == "MASTER_DATA":
+        ws.cell(row=2, column=1, value="CODE001")
+        ws.cell(row=2, column=2, value="Example - replace or delete this row")
+        ws.cell(row=2, column=3, value=1)
+        ws.cell(row=2, column=4, value="Yes")
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return Response(
+        content=output.getvalue(),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"'
+            ),
+        },
+    )
+
 @router.post("/preview")
 async def preview_bulk_import(
     import_type: str = Form(...),
@@ -603,4 +788,5 @@ async def execute_bulk_import(
         },
         "results": results,
     }
+
 

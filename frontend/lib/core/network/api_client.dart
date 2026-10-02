@@ -43,6 +43,19 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<http.Response> getBytes(String path) async {
+    final response = await http.get(
+      Uri.parse('${AppConfig.apiBaseUrl}$path'),
+      headers: await _headers(includeJson: false),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _decode(response);
+    }
+
+    return response;
+  }
+
   Future<dynamic> post(
     String path,
     Map<String, dynamic> body,

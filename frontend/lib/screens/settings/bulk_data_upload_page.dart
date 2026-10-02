@@ -19,6 +19,7 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
   bool _loadingOptions = true;
   bool _previewing = false;
   bool _importing = false;
+  bool _downloadingTemplate = false;
   bool _updateExisting = true;
 
   String? _error;
@@ -116,6 +117,109 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
 
   String _cleanError(Object error) {
     return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  String get _selectedTemplateName {
+    if (_importType == 'MASTER_DATA') {
+      for (final item in _masterTypes) {
+        if (item['id']?.toString() == _masterTypeId) {
+          return item['name']?.toString() ?? 'Master Data';
+        }
+      }
+
+      return 'Master Data';
+    }
+
+    for (final item in _importTypes) {
+      if (item['id']?.toString() == _importType) {
+        return item['name']?.toString() ?? _importType;
+      }
+    }
+
+    return _importType;
+  }
+
+  Future<void> _downloadTemplate() async {
+    if (_importType == 'MASTER_DATA' &&
+        (_masterTypeId == null || _masterTypeId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select Master Type first.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _downloadingTemplate = true;
+      _error = null;
+    });
+
+    try {
+      final query = <String>[
+        'import_type=${Uri.encodeQueryComponent(_importType)}',
+      ];
+
+      if (_masterTypeId != null && _masterTypeId!.isNotEmpty) {
+        query.add(
+          'master_type_id=${Uri.encodeQueryComponent(_masterTypeId!)}',
+        );
+      }
+
+      final response = await widget.apiClient.getBytes(
+        '/api/v1/admin/bulk-import/template?${query.join('&')}',
+      );
+
+      String fileName;
+
+      final disposition = response.headers['content-disposition'];
+
+      final match = disposition == null
+          ? null
+          : RegExp(
+              r'filename="?([^";]+)"?',
+              caseSensitive: false,
+            ).firstMatch(disposition);
+
+      if (match != null) {
+        fileName = match.group(1)!;
+      } else {
+        final safeName =
+            _selectedTemplateName.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
+
+        fileName = '${safeName}_Import_Template.xlsx';
+      }
+
+      await FilePicker.saveFile(
+        dialogTitle: 'Save $_selectedTemplateName Template',
+        fileName: fileName,
+        bytes: response.bodyBytes,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$_selectedTemplateName template downloaded.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = _cleanError(e);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingTemplate = false;
+        });
+      }
+    }
   }
 
   Future<void> _pickFile() async {
@@ -476,6 +580,35 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
             ),
           ],
           const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _previewing ||
+                      _importing ||
+                      _downloadingTemplate ||
+                      (_importType == 'MASTER_DATA' &&
+                          (_masterTypeId == null || _masterTypeId!.isEmpty))
+                  ? null
+                  : _downloadTemplate,
+              icon: _downloadingTemplate
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.download_outlined,
+                    ),
+              label: Text(
+                _downloadingTemplate
+                    ? 'Preparing Template...'
+                    : 'Download $_selectedTemplateName Template',
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -490,7 +623,7 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
                   Icons.upload_file,
                 ),
                 label: const Text(
-                  'Select Excel',
+                  'Select Filled Excel',
                 ),
               ),
             ],
