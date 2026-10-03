@@ -1,4 +1,5 @@
 from io import BytesIO
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -8,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import EmployeeMaster, MasterData, MasterType
+from .models import EmployeeMaster, MasterData, MasterType, Lead
 from .admin_api import (
     get_current_user,
     require_permission,
@@ -654,6 +655,250 @@ def apply_employee_import_values(
 
 
 
+
+
+# ============================================================
+# LEAD BULK IMPORT HELPERS
+# ============================================================
+
+LEAD_TEXT_FIELDS = {
+    "lead_source",
+    "customer_name",
+    "mobile",
+    "location",
+    "building_type",
+    "lift_type",
+    "requirement_time",
+    "negotiation_status",
+    "lead_status",
+    "remarks",
+    "new_remarks",
+    "marketing_head",
+    "lead_priority",
+    "lost_reason",
+}
+
+LEAD_BOOL_FIELDS = {
+    "call_done",
+    "appointment_fixed",
+    "site_visit_done",
+    "survey_done",
+    "quotation_given",
+    "order_finalized",
+    "order_lost",
+    "active",
+}
+
+LEAD_DATE_FIELDS = {
+    "lead_date",
+    "appointment_date",
+    "site_visit_date",
+    "survey_date",
+    "quotation_date",
+    "negotiation_date",
+    "order_date",
+    "lost_date",
+    "last_call",
+    "follow_up_date",
+    "expected_close_date",
+}
+
+LEAD_NUMBER_FIELDS = {
+    "score",
+    "expected_order_value",
+}
+
+
+def lead_row_values(row: dict[str, Any]):
+    values: dict[str, Any] = {}
+
+    lead_id = clean_value(row.get("lead_id"))
+
+    if lead_id is not None:
+        lead_id = str(lead_id).strip().upper()
+
+    values["lead_id"] = lead_id
+
+    # Excel template name -> database field name
+    values["lead_collector_name"] = clean_value(
+        row.get("executive")
+        or row.get("lead_collector_name")
+    )
+
+    values["marketing_head"] = clean_value(
+        row.get("assigned_marketing_head")
+        or row.get("marketing_head")
+    )
+
+    for field in LEAD_TEXT_FIELDS:
+        if field == "marketing_head":
+            continue
+        values[field] = clean_value(row.get(field))
+
+    for field in LEAD_BOOL_FIELDS:
+        raw = clean_value(row.get(field))
+
+        if raw is None:
+            values[field] = None
+        else:
+            values[field] = parse_bool(
+                raw,
+                default=True if field == "active" else False,
+            )
+
+    for field in LEAD_DATE_FIELDS:
+        raw = clean_value(row.get(field))
+
+        values[field] = (
+            parse_employee_date(raw)
+            if raw is not None
+            else None
+        )
+
+    for field in LEAD_NUMBER_FIELDS:
+        raw = clean_value(row.get(field))
+
+        values[field] = (
+            parse_float(raw)
+            if raw is not None
+            else None
+        )
+
+    return values
+
+
+def validate_lead_rows(
+    db: Session,
+    rows: list[dict[str, Any]],
+):
+    results = []
+    seen_ids: set[str] = set()
+
+    for row in rows:
+        errors = []
+
+        try:
+            values = lead_row_values(row)
+        except ValueError as exc:
+            values = {
+                "lead_id": clean_value(row.get("lead_id")),
+                "customer_name": clean_value(row.get("customer_name")),
+                "mobile": clean_value(row.get("mobile")),
+            }
+            errors.append(str(exc))
+
+        lead_id = str(
+            values.get("lead_id") or ""
+        ).strip().upper()
+
+        customer_name = str(
+            values.get("customer_name") or ""
+        ).strip()
+
+        mobile = str(
+            values.get("mobile") or ""
+        ).strip()
+
+        if not customer_name:
+            errors.append("Customer Name is required")
+
+        if not mobile:
+            errors.append("Mobile Number is required")
+
+        if lead_id:
+            if lead_id in seen_ids:
+                errors.append(
+                    f"Duplicate Lead ID inside Excel: {lead_id}"
+                )
+            else:
+                seen_ids.add(lead_id)
+
+        existing = None
+
+        if lead_id:
+            existing = (
+                db.query(Lead)
+                .filter(Lead.lead_id == lead_id)
+                .first()
+            )
+
+        results.append({
+            "excel_row": row.get("_excel_row"),
+            "lead_id": lead_id or None,
+            "customer_name": customer_name or None,
+            "mobile": mobile or None,
+            "action": "UPDATE" if existing else "CREATE",
+            "valid": not errors,
+            "errors": errors,
+        })
+
+    return results
+
+
+def next_bulk_lead_id(db: Session):
+    rows = (
+        db.query(Lead.lead_id)
+        .filter(Lead.lead_id.isnot(None))
+        .all()
+    )
+
+    highest = 0
+
+    for (value,) in rows:
+        text = str(value or "").strip().upper()
+
+        if text.startswith("LD"):
+            digits = text[2:]
+
+            if digits.isdigit():
+                highest = max(highest, int(digits))
+
+    return f"LD{highest + 1:03d}"
+
+
+def apply_lead_import_values(
+    lead: Lead,
+    values: dict[str, Any],
+    *,
+    creating: bool,
+):
+    text_fields = set(LEAD_TEXT_FIELDS) | {
+        "lead_collector_name",
+    }
+
+    for field in text_fields:
+        value = values.get(field)
+
+        if value is not None:
+            setattr(lead, field, value)
+
+    for field in LEAD_BOOL_FIELDS:
+        value = values.get(field)
+
+        if value is not None:
+            setattr(lead, field, value)
+
+    for field in LEAD_DATE_FIELDS:
+        value = values.get(field)
+
+        if value is not None:
+            setattr(lead, field, value)
+
+    for field in LEAD_NUMBER_FIELDS:
+        value = values.get(field)
+
+        if value is not None:
+            setattr(lead, field, value)
+
+    if creating:
+        if values.get("active") is None:
+            lead.active = True
+
+        if not values.get("lead_status"):
+            lead.lead_status = "New Lead"
+
+
+
 @router.get("/types")
 def bulk_import_types(
     user: EmployeeMaster = Depends(get_current_user),
@@ -946,6 +1191,12 @@ async def preview_bulk_import(
             rows,
         )
 
+    elif import_type == "LEAD":
+        validation = validate_lead_rows(
+            db,
+            rows,
+        )
+
     return {
         "success": True,
         "filename": file.filename,
@@ -981,7 +1232,7 @@ async def execute_bulk_import(
     else:
         require_permission(db, user, "data_master", "add")
 
-    if import_type not in {"MASTER_DATA", "EMPLOYEE"}:
+    if import_type not in {"MASTER_DATA", "EMPLOYEE", "LEAD"}:
         raise HTTPException(
             status_code=400,
             detail=(
@@ -1149,6 +1400,190 @@ async def execute_bulk_import(
             None,
             (
                 f"Employee import: "
+                f"created={created}, "
+                f"updated={updated}, "
+                f"skipped={skipped}, "
+                f"failed={failed}"
+            ),
+        )
+
+        db.commit()
+
+        return {
+            "success": failed == 0,
+            "filename": file.filename,
+            "import_type": import_type,
+            "selected_sheet": selected_sheet,
+            "summary": {
+                "total": len(rows),
+                "created": created,
+                "updated": updated,
+                "skipped": skipped,
+                "failed": failed,
+            },
+            "results": results,
+        }
+
+    if import_type == "LEAD":
+        wb, selected_sheet = get_workbook_sheet(
+            content,
+            sheet_name,
+        )
+
+        _, rows = read_sheet(wb[selected_sheet])
+
+        validation = validate_lead_rows(
+            db,
+            rows,
+        )
+
+        validation_by_row = {
+            item["excel_row"]: item
+            for item in validation
+        }
+
+        created = 0
+        updated = 0
+        skipped = 0
+        failed = 0
+        results = []
+
+        generated_ids: set[str] = set()
+
+        for raw_row in rows:
+            excel_row = raw_row.get("_excel_row")
+            item = validation_by_row.get(excel_row)
+
+            if item is None:
+                failed += 1
+                results.append({
+                    "excel_row": excel_row,
+                    "action": "ERROR",
+                    "valid": False,
+                    "errors": ["Validation result not found"],
+                })
+                continue
+
+            if not item["valid"]:
+                failed += 1
+                results.append(item)
+                continue
+
+            try:
+                values = lead_row_values(raw_row)
+
+                lead_id = str(
+                    values.get("lead_id") or ""
+                ).strip().upper()
+
+                existing = None
+
+                if lead_id:
+                    existing = (
+                        db.query(Lead)
+                        .filter(Lead.lead_id == lead_id)
+                        .first()
+                    )
+
+                if existing and not update_existing:
+                    skipped += 1
+
+                    results.append({
+                        **item,
+                        "action": "SKIP",
+                    })
+
+                    continue
+
+                with db.begin_nested():
+                    if existing:
+                        lead = existing
+
+                        apply_lead_import_values(
+                            lead,
+                            values,
+                            creating=False,
+                        )
+
+                        lead.updated_at = now_local()
+                        final_lead_id = lead.lead_id
+                        action = "UPDATE"
+
+                    else:
+                        final_lead_id = lead_id
+
+                        if not final_lead_id:
+                            final_lead_id = next_bulk_lead_id(db)
+
+                            while final_lead_id in generated_ids:
+                                number = int(final_lead_id[2:]) + 1
+                                final_lead_id = f"LD{number:03d}"
+
+                        generated_ids.add(final_lead_id)
+
+                        now = now_local()
+
+                        lead = Lead(
+                            timestamp=now,
+                            lead_date=(
+                                values.get("lead_date")
+                                or now
+                            ),
+                            lead_key=str(uuid.uuid4()),
+                            lead_id=final_lead_id,
+                            customer_name=str(
+                                values.get("customer_name") or ""
+                            ).strip(),
+                            mobile=str(
+                                values.get("mobile") or ""
+                            ).strip(),
+                            created_at=now,
+                            updated_at=now,
+                        )
+
+                        apply_lead_import_values(
+                            lead,
+                            values,
+                            creating=True,
+                        )
+
+                        db.add(lead)
+                        action = "CREATE"
+
+                    db.flush()
+
+                if action == "CREATE":
+                    created += 1
+                else:
+                    updated += 1
+
+                results.append({
+                    **item,
+                    "lead_id": final_lead_id,
+                    "action": action,
+                    "valid": True,
+                    "errors": [],
+                })
+
+            except Exception as exc:
+                failed += 1
+
+                results.append({
+                    **item,
+                    "action": "ERROR",
+                    "valid": False,
+                    "errors": [str(exc)],
+                })
+
+        audit(
+            db,
+            user.id,
+            "BULK_IMPORT",
+            "sales_marketing",
+            "Lead",
+            None,
+            (
+                f"Lead import: "
                 f"created={created}, "
                 f"updated={updated}, "
                 f"skipped={skipped}, "
