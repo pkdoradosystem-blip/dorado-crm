@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../services/services.dart';
 import '../leads/lead_update_page.dart';
@@ -552,8 +552,9 @@ class _MarketingReportsPageState
     Map<String, dynamic> lead,
   ) {
     final id =
-        lead['id']?.toString() ??
-            '';
+        lead['lead_id']?.toString().trim().isNotEmpty == true
+            ? lead['lead_id'].toString().trim()
+            : lead['id']?.toString() ?? '';
 
     final customer =
         lead['customer_name']
