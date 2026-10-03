@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../services/services.dart';
 import 'lead_update_page.dart';
@@ -644,7 +644,7 @@ class _AllLeadsPageState extends State<AllLeadsPage> {
                   (lead) {
                     final id =
                         _text(
-                      lead['id'],
+                      lead['lead_id'],
                     );
 
                     final date =
