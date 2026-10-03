@@ -764,8 +764,11 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
         .where(
           (header) => header != '_excel_row',
         )
-        .take(8)
         .toList();
+
+    final hasValidationErrors = _validation.any(
+      (item) => item['valid'] == false,
+    );
 
     return _section(
       title: 'Preview (${_rows.length} rows shown)',
@@ -817,7 +820,12 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
                     ...displayHeaders.map(
                       (header) => DataCell(
                         Text(
-                          row[header]?.toString() ?? '',
+                          header == 'temporary_password' ||
+                                  header == 'password'
+                              ? ((row[header]?.toString().isNotEmpty ?? false)
+                                  ? '********'
+                                  : '')
+                              : row[header]?.toString() ?? '',
                         ),
                       ),
                     ),
@@ -847,7 +855,10 @@ class _BulkDataUploadPageState extends State<BulkDataUploadPage> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _importing || _previewing ? null : _importData,
+              onPressed:
+                  _importing || _previewing || hasValidationErrors
+                      ? null
+                      : _importData,
               icon: _importing
                   ? const SizedBox(
                       width: 18,
