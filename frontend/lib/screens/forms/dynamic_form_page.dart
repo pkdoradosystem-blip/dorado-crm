@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -67,11 +66,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
         for (final item in result) {
           if (item is Map) {
-            final name =
-                item['value']?.toString().trim() ?? '';
+            final name = item['value']?.toString().trim() ?? '';
 
-            final manager =
-                item['reporting_manager']?.toString().trim() ?? '';
+            final manager = item['reporting_manager']?.toString().trim() ?? '';
 
             if (name.isNotEmpty) {
               _executiveManagers[name] = manager;
@@ -202,11 +199,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                     );
                   },
                 ),
-                if ((_controllers[fieldKey]
-                            ?.text
-                            .trim()
-                            .isNotEmpty ??
-                        false))
+                if ((_controllers[fieldKey]?.text.trim().isNotEmpty ?? false))
                   ListTile(
                     leading: const Icon(
                       Icons.delete_outline,
@@ -244,8 +237,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     });
 
     try {
-      bool serviceEnabled =
-          await Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!serviceEnabled) {
         if (!mounted) return;
@@ -261,12 +253,10 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         return;
       }
 
-      LocationPermission permission =
-          await Geolocator.checkPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
 
       if (permission == LocationPermission.denied) {
-        permission =
-            await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission();
       }
 
       if (permission == LocationPermission.denied) {
@@ -283,8 +273,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         return;
       }
 
-      if (permission ==
-          LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -305,8 +294,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         return;
       }
 
-      final Position position =
-          await Geolocator.getCurrentPosition(
+      final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
@@ -317,17 +305,14 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
       // At this stage we store coordinates in the visible
       // location field. Address conversion can be added later.
-      _controllers[fieldKey]?.text =
-          '${position.latitude.toStringAsFixed(6)}, '
+      _controllers[fieldKey]?.text = '${position.latitude.toStringAsFixed(6)}, '
           '${position.longitude.toStringAsFixed(6)}';
 
       // If schema contains latitude/longitude fields,
       // populate them automatically as well.
-      _controllers['latitude']?.text =
-          position.latitude.toString();
+      _controllers['latitude']?.text = position.latitude.toString();
 
-      _controllers['longitude']?.text =
-          position.longitude.toString();
+      _controllers['longitude']?.text = position.longitude.toString();
 
       if (!mounted) return;
 
@@ -357,8 +342,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
     final currentState = _formKey.currentState;
 
-    if (currentState == null ||
-        !currentState.validate()) {
+    if (currentState == null || !currentState.validate()) {
       return;
     }
 
@@ -370,8 +354,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       final Map<String, dynamic> values = {};
 
       for (final field in _schema!.fields) {
-        values[field.key] =
-            _controllers[field.key]?.text.trim() ?? '';
+        values[field.key] = _controllers[field.key]?.text.trim() ?? '';
       }
 
       if (widget.formCode == 'lead_entry') {
@@ -463,8 +446,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     }) {
       return InputDecoration(
         labelText: field.label,
-        hintText:
-            hintText ?? 'Enter ${field.label}',
+        hintText: hintText ?? 'Enter ${field.label}',
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
@@ -490,9 +472,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     }
 
     String? validateValue(String? value) {
-      if (field.required &&
-          (value == null ||
-              value.trim().isEmpty)) {
+      if (field.required && (value == null || value.trim().isEmpty)) {
         return '${field.label} is required';
       }
 
@@ -509,8 +489,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     if (field.type == 'dropdown') {
       final options = field.options;
 
-      final currentValue =
-          controller.text.trim();
+      final currentValue = controller.text.trim();
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
@@ -518,24 +497,20 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           key: ValueKey(
             '${field.key}-$_formVersion',
           ),
-          initialValue:
-              currentValue.isEmpty ||
-                      !options.contains(currentValue)
-                  ? null
-                  : currentValue,
+          initialValue: currentValue.isEmpty || !options.contains(currentValue)
+              ? null
+              : currentValue,
           isExpanded: true,
           decoration: decoration(
             hintText: 'Select ${field.label}',
           ),
           items: options
               .map(
-                (option) =>
-                    DropdownMenuItem<String>(
+                (option) => DropdownMenuItem<String>(
                   value: option,
                   child: Text(
                     option,
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               )
@@ -543,26 +518,18 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           onChanged: options.isEmpty
               ? null
               : (value) {
-                  controller.text =
-                      value ?? '';
+                  controller.text = value ?? '';
 
                   // Auto assign Marketing Head when
                   // executive/lead collector is selected.
-                  if (field.key ==
-                          'lead_collector_name' ||
+                  if (field.key == 'lead_collector_name' ||
                       field.key == 'executive') {
-                    final manager =
-                        _executiveManagers[
-                                value ?? ''] ??
-                            '';
+                    final manager = _executiveManagers[value ?? ''] ?? '';
 
-                    final marketingController =
-                        _controllers[
-                            'marketing_head'];
+                    final marketingController = _controllers['marketing_head'];
 
                     if (marketingController != null) {
-                      marketingController.text =
-                          manager;
+                      marketingController.text = manager;
                     }
 
                     setState(() {});
@@ -580,8 +547,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           controller: controller,
           readOnly: true,
           decoration: decoration(
-            hintText:
-                'Auto assigned from Executive',
+            hintText: 'Auto assigned from Executive',
           ).copyWith(
             suffixIcon: const Icon(
               Icons.auto_awesome_outlined,
@@ -598,8 +564,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         child: TextFormField(
           controller: controller,
           decoration: decoration(
-            hintText:
-                'Enter location or use GPS',
+            hintText: 'Enter location or use GPS',
           ).copyWith(
             prefixIcon: const Icon(
               Icons.location_on_outlined,
@@ -610,20 +575,17 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                     child: SizedBox(
                       width: 20,
                       height: 20,
-                      child:
-                          CircularProgressIndicator(
+                      child: CircularProgressIndicator(
                         strokeWidth: 2,
                       ),
                     ),
                   )
                 : IconButton(
-                    tooltip:
-                        'Use Current Location',
+                    tooltip: 'Use Current Location',
                     icon: const Icon(
                       Icons.my_location,
                     ),
-                    onPressed: () =>
-                        _getCurrentLocation(
+                    onPressed: () => _getCurrentLocation(
                       field.key,
                     ),
                   ),
@@ -634,8 +596,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     }
 
     if (field.type == 'image') {
-      final hasImage =
-          controller.text.trim().isNotEmpty;
+      final hasImage = controller.text.trim().isNotEmpty;
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
@@ -645,26 +606,20 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           ),
           controller: controller,
           readOnly: true,
-          onTap: () =>
-              _showImageSource(field.key),
+          onTap: () => _showImageSource(field.key),
           decoration: decoration(
             hintText: 'Camera / Gallery',
           ).copyWith(
             prefixIcon: Icon(
-              hasImage
-                  ? Icons.check_circle_outline
-                  : Icons.image_outlined,
-              color: hasImage
-                  ? Colors.green
-                  : null,
+              hasImage ? Icons.check_circle_outline : Icons.image_outlined,
+              color: hasImage ? Colors.green : null,
             ),
             suffixIcon: IconButton(
               tooltip: 'Camera / Gallery',
               icon: const Icon(
                 Icons.add_a_photo_outlined,
               ),
-              onPressed: () =>
-                  _showImageSource(field.key),
+              onPressed: () => _showImageSource(field.key),
             ),
           ),
           validator: validateValue,
@@ -699,8 +654,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
               initialDate = current;
             }
 
-            final selected =
-                await showDatePicker(
+            final selected = await showDatePicker(
               context: context,
               initialDate: initialDate,
               firstDate: DateTime(2020),
@@ -709,10 +663,24 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
             if (selected == null) return;
 
-            controller.text =
-                '${selected.year.toString().padLeft(4, '0')}-'
-                '${selected.month.toString().padLeft(2, '0')}-'
-                '${selected.day.toString().padLeft(2, '0')}';
+            const monthNames = [
+              'Jan',
+              'Feb',
+              'Mar',
+              'Apr',
+              'May',
+              'Jun',
+              'Jul',
+              'Aug',
+              'Sep',
+              'Oct',
+              'Nov',
+              'Dec',
+            ];
+
+            controller.text = '${selected.day.toString().padLeft(2, '0')} '
+                '${monthNames[selected.month - 1]} '
+                '${selected.year}';
 
             if (mounted) {
               setState(() {});
@@ -728,14 +696,12 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       maxLines = 4;
     }
 
-    TextInputType keyboardType =
-        TextInputType.text;
+    TextInputType keyboardType = TextInputType.text;
 
     if (field.type == 'phone') {
       keyboardType = TextInputType.phone;
     } else if (field.type == 'number') {
-      keyboardType =
-          const TextInputType.numberWithOptions(
+      keyboardType = const TextInputType.numberWithOptions(
         decimal: true,
       );
     }
@@ -755,11 +721,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF4F7FB),
+      backgroundColor: const Color(0xFFF4F7FB),
       appBar: AppBar(
-        backgroundColor:
-            const Color(0xFF0B5C9E),
+        backgroundColor: const Color(0xFF0B5C9E),
         foregroundColor: Colors.white,
         title: Text(widget.title),
       ),
@@ -815,79 +779,55 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       padding: const EdgeInsets.all(18),
       child: Center(
         child: ConstrainedBox(
-          constraints:
-              const BoxConstraints(maxWidth: 980),
+          constraints: const BoxConstraints(maxWidth: 980),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color:
-                          const Color(0xFFE3E9EF),
+                      color: const Color(0xFFE3E9EF),
                     ),
                   ),
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
                         _schema!.title,
-                        style:
-                            const TextStyle(
+                        style: const TextStyle(
                           fontSize: 20,
-                          fontWeight:
-                              FontWeight.w700,
-                          color:
-                              Color(0xFF17212B),
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF17212B),
                         ),
                       ),
                       const SizedBox(height: 18),
-
                       LayoutBuilder(
-                        builder:
-                            (context, constraints) {
-                          final fields =
-                              _schema!.fields;
+                        builder: (context, constraints) {
+                          final fields = _schema!.fields;
 
-                          final useTwoColumns =
-                              constraints.maxWidth >=
-                                  620;
+                          final useTwoColumns = constraints.maxWidth >= 620;
 
                           if (!useTwoColumns) {
                             return Column(
-                              children: fields
-                                  .map(_buildField)
-                                  .toList(),
+                              children: fields.map(_buildField).toList(),
                             );
                           }
 
                           final rows = <Widget>[];
 
-                          for (int i = 0;
-                              i < fields.length;
-                              i += 2) {
-                            final left =
-                                fields[i];
+                          for (int i = 0; i < fields.length; i += 2) {
+                            final left = fields[i];
 
-                            final hasRight =
-                                i + 1 <
-                                    fields.length;
+                            final hasRight = i + 1 < fields.length;
 
-                            final right = hasRight
-                                ? fields[i + 1]
-                                : null;
+                            final right = hasRight ? fields[i + 1] : null;
 
-                            if (left.type ==
-                                'auto') {
+                            if (left.type == 'auto') {
                               rows.add(
                                 _buildField(left),
                               );
@@ -905,13 +845,10 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
                             rows.add(
                               Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment
-                                        .start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
-                                    child:
-                                        _buildField(
+                                    child: _buildField(
                                       left,
                                     ),
                                   ),
@@ -919,10 +856,8 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                                     width: 14,
                                   ),
                                   Expanded(
-                                    child: right ==
-                                            null
-                                        ? const SizedBox
-                                            .shrink()
+                                    child: right == null
+                                        ? const SizedBox.shrink()
                                         : _buildField(
                                             right,
                                           ),
@@ -937,50 +872,34 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                           );
                         },
                       ),
-
                       const SizedBox(height: 4),
-
                       SizedBox(
                         height: 48,
-                        child:
-                            ElevatedButton.icon(
-                          onPressed: _saving
-                              ? null
-                              : _saveForm,
-                          style:
-                              ElevatedButton
-                                  .styleFrom(
-                            backgroundColor:
-                                const Color(
+                        child: ElevatedButton.icon(
+                          onPressed: _saving ? null : _saveForm,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(
                               0xFF0B5C9E,
                             ),
-                            foregroundColor:
-                                Colors.white,
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(9),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(9),
                             ),
                           ),
                           icon: _saving
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child:
-                                      CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color:
-                                        Colors.white,
+                                    color: Colors.white,
                                   ),
                                 )
                               : const Icon(
                                   Icons.save_outlined,
                                 ),
                           label: Text(
-                            _saving
-                                ? 'Saving...'
-                                : 'Save Lead',
+                            _saving ? 'Saving...' : 'Save Lead',
                           ),
                         ),
                       ),
@@ -997,8 +916,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
   @override
   void dispose() {
-    for (final controller
-        in _controllers.values) {
+    for (final controller in _controllers.values) {
       controller.dispose();
     }
 
