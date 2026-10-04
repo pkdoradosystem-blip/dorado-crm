@@ -299,6 +299,183 @@ class _DataMasterPageState extends State<DataMasterPage> {
     }
   }
 
+  Future<void> _editSelectedMasterType() async {
+    final typeId = _selectedTypeId;
+
+    if (typeId == null || typeId.isEmpty) {
+      return;
+    }
+
+    Map<String, dynamic>? selectedType;
+
+    for (final type in _masterTypes) {
+      if (type['id']?.toString() == typeId) {
+        selectedType = type;
+        break;
+      }
+    }
+
+    if (selectedType == null) {
+      return;
+    }
+
+    final nameController = TextEditingController(
+      text: selectedType['master_name']?.toString() ??
+          selectedType['name']?.toString() ??
+          '',
+    );
+
+    final descriptionController = TextEditingController(
+      text: selectedType['description']?.toString() ?? '',
+    );
+
+    final orderController = TextEditingController(
+      text: selectedType['display_order']?.toString() ?? '0',
+    );
+
+    bool allowGlobal = _asBool(selectedType['allow_global']);
+    bool active = _asBool(selectedType['active']);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Master Type'),
+              content: SizedBox(
+                width: 450,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        initialValue: typeId,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Master Type ID',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Master Type Name *',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: descriptionController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: orderController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Display Order',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Allow Global'),
+                        value: allowGlobal,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            allowGlobal = value;
+                          });
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Active'),
+                        subtitle: Text(
+                          active
+                              ? 'This Master Type is available'
+                              : 'This Master Type is inactive',
+                        ),
+                        value: active,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            active = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Master Type Name is required',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await widget.apiClient.put(
+                        '/api/v1/admin/master-types/$typeId',
+                        {
+                          'name': name,
+                          'description': descriptionController.text.trim(),
+                          'display_order':
+                              int.tryParse(orderController.text) ?? 0,
+                          'allow_global': allowGlobal,
+                          'active': active,
+                        },
+                      );
+
+                      if (!dialogContext.mounted) return;
+
+                      Navigator.pop(dialogContext, true);
+                    } catch (e) {
+                      if (!dialogContext.mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(_cleanError(e)),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Update'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    descriptionController.dispose();
+    orderController.dispose();
+
+    if (saved == true) {
+      await _loadMasterTypes();
+    }
+  }
+
   Future<void> _showRecordDialog({
     Map<String, dynamic>? record,
   }) async {
@@ -614,6 +791,14 @@ class _DataMasterPageState extends State<DataMasterPage> {
                         ),
                       ),
                       const SizedBox(width: 10),
+                      IconButton.filledTonal(
+                        tooltip: 'Edit Master Type',
+                        onPressed: _selectedTypeId == null
+                            ? null
+                            : _editSelectedMasterType,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      const SizedBox(width: 6),
                       IconButton.filledTonal(
                         tooltip: 'Add Master Type',
                         onPressed: _addMasterType,

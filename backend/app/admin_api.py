@@ -2722,6 +2722,98 @@ def create_master_type(
 
 
 # =========================================================
+
+# =========================================================
+# MASTER TYPE UPDATE
+# =========================================================
+
+@router.put("/admin/master-types/{master_type_id}")
+def update_master_type(
+    master_type_id: str,
+    payload: dict[str, Any],
+    user: EmployeeMaster = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_permission(
+        db,
+        user,
+        "settings",
+        "edit",
+    )
+
+    row = (
+        db.query(MasterType)
+        .filter(MasterType.id == master_type_id)
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Master Type not found",
+        )
+
+    if "name" in payload:
+        name = str(payload.get("name") or "").strip()
+
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Master Type Name is required",
+            )
+
+        row.name = name
+
+    if "description" in payload:
+        description = str(
+            payload.get("description") or ""
+        ).strip()
+
+        row.description = description or None
+
+    if "display_order" in payload:
+        try:
+            row.display_order = int(
+                payload.get("display_order") or 0
+            )
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="Display Order must be a number",
+            )
+
+    if "allow_global" in payload:
+        row.allow_global = bool(
+            payload.get("allow_global")
+        )
+
+    if "active" in payload:
+        row.active = bool(
+            payload.get("active")
+        )
+
+    if hasattr(row, "updated_at"):
+        row.updated_at = now_local()
+
+    if hasattr(row, "updated_by"):
+        row.updated_by = user.id
+
+    audit(
+        db,
+        user.id,
+        "EDIT",
+        "settings",
+        "MasterType",
+        master_type_id,
+        f"Master Type updated: {row.name}",
+    )
+
+    db.commit()
+    db.refresh(row)
+
+    return model_to_dict(row)
+
+
 # MASTER DATA
 # =========================================================
 
