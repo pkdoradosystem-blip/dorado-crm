@@ -84,9 +84,67 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   String _today() {
     final now = DateTime.now();
 
-    return '${now.year.toString().padLeft(4, '0')}-'
-        '${now.month.toString().padLeft(2, '0')}-'
-        '${now.day.toString().padLeft(2, '0')}';
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return '${now.day.toString().padLeft(2, '0')} '
+        '${monthNames[now.month - 1]} '
+        '${now.year}';
+  }
+
+  String _dateForApi(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return text;
+
+    final iso = DateTime.tryParse(text);
+    if (iso != null) {
+      return '${iso.year.toString().padLeft(4, '0')}-'
+          '${iso.month.toString().padLeft(2, '0')}-'
+          '${iso.day.toString().padLeft(2, '0')}';
+    }
+
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    final parts = text.split(' ');
+
+    if (parts.length == 3) {
+      final day = int.tryParse(parts[0]);
+      final month = monthNames.indexOf(parts[1]) + 1;
+      final year = int.tryParse(parts[2]);
+
+      if (day != null && month > 0 && year != null) {
+        return '${year.toString().padLeft(4, '0')}-'
+            '${month.toString().padLeft(2, '0')}-'
+            '${day.toString().padLeft(2, '0')}';
+      }
+    }
+
+    return text;
   }
 
   Future<void> _loadForm() async {
@@ -354,7 +412,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       final Map<String, dynamic> values = {};
 
       for (final field in _schema!.fields) {
-        values[field.key] = _controllers[field.key]?.text.trim() ?? '';
+        final value = _controllers[field.key]?.text.trim() ?? '';
+
+        values[field.key] = field.type == 'date' ? _dateForApi(value) : value;
       }
 
       if (widget.formCode == 'lead_entry') {
