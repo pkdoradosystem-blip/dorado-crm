@@ -1,4 +1,4 @@
-﻿from .bulk_import_api import router as bulk_import_router
+from .bulk_import_api import router as bulk_import_router
 from datetime import datetime
 from typing import Any
 import uuid
@@ -446,7 +446,25 @@ def get_form(code: str, db: Session = Depends(get_db)):
              "options": [x["value"] for x in active_master_values(db, LeadSourceMaster, "lead_source")]},
             {"key": "customer_name", "label": "Customer Name", "type": "text", "required": True},
             {"key": "mobile", "label": "Mobile", "type": "phone", "required": True},
-            {"key": "location", "label": "Location", "type": "map", "required": False},
+            {
+            "key": "construction_building_name",
+            "label": "Construction / Building Name",
+            "type": "text",
+            "required": False,
+        },
+        {
+            "key": "office_address",
+            "label": "Office Address",
+            "type": "textarea",
+            "required": False,
+        },
+        {
+            "key": "site_address",
+            "label": "Site Address",
+            "type": "textarea",
+            "required": False,
+        },
+        {"key": "location", "label": "Location", "type": "map", "required": False},
             {"key": "building_type", "label": "Building Type", "type": "dropdown", "required": False,
              "options": [x["value"] for x in active_master_values(db, BuildingTypeMaster, "building_type")]},
             {"key": "lift_type", "label": "Lift Type", "type": "dropdown", "required": False,
@@ -521,7 +539,10 @@ def create_lead(payload: dict[str, Any], db: Session = Depends(get_db)):
         collector_remarks=payload.get("collector_remarks"),
         lead_source=payload.get("lead_source"),
         customer_name=customer_name,
+        construction_building_name=payload.get("construction_building_name"),
         mobile=mobile,
+        office_address=payload.get("office_address"),
+        site_address=payload.get("site_address"),
         location=payload.get("location"),
         latitude=payload.get("latitude"),
         longitude=payload.get("longitude"),

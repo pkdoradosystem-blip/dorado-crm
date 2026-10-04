@@ -33,6 +33,10 @@ class Lead(Base):
     collector_remarks = Column(Text, nullable=True)
     lead_source = Column(String(150), nullable=True)
     customer_name = Column(String(200), nullable=False)
+
+    construction_building_name = Column(String(255), nullable=True)
+    office_address = Column(Text, nullable=True)
+    site_address = Column(Text, nullable=True)
     mobile = Column(String(30), nullable=False)
     location = Column(String(250), nullable=True)
     latitude = Column(Float, nullable=True)

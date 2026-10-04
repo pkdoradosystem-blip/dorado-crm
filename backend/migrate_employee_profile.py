@@ -161,3 +161,17 @@ def migrate_employee_master():
 
 if __name__ == "__main__":
     migrate_employee_master()
+
+# Run Lead address migration after employee profile migration.
+# Kept here so existing Render Start Command does not need manual change.
+if __name__ == "__main__":
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "migrate_lead_addresses.py"],
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
