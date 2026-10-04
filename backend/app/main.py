@@ -283,10 +283,20 @@ def active_master_values(db: Session, model, value_field: str):
 
 
 def common_master_options(db: Session, master_type_id: str):
+    # Support both historical IDs such as "EXECUTIVE VIEW"
+    # and standard IDs such as "EXECUTIVE_VIEW".
+    requested = str(master_type_id or "").strip().upper()
+
+    candidate_ids = {
+        requested,
+        requested.replace("_", " "),
+        requested.replace(" ", "_"),
+    }
+
     rows = (
         db.query(MasterData)
         .filter(
-            MasterData.master_type_id == master_type_id,
+            MasterData.master_type_id.in_(candidate_ids),
             MasterData.active.is_(True),
         )
         .order_by(
