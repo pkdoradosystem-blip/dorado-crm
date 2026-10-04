@@ -1,4 +1,4 @@
-from .bulk_import_api import router as bulk_import_router
+﻿from .bulk_import_api import router as bulk_import_router
 from datetime import datetime
 from typing import Any
 import uuid
@@ -442,7 +442,7 @@ def get_form(code: str, db: Session = Depends(get_db)):
             {"key": "lead_date", "label": "Lead Date", "type": "date", "required": True},
             {"key": "lead_collector_name", "label": "Executive Name", "type": "dropdown", "required": True,
              "options": [x["value"] for x in employee_options(db, "lead collector")]},
-            {"key": "lead_source", "label": "Lead Source", "type": "dropdown", "required": False,
+            {"key": "lead_source", "label": "Lead Source", "type": "dropdown", "required": True,
              "options": [x["value"] for x in active_master_values(db, LeadSourceMaster, "lead_source")]},
             {"key": "customer_name", "label": "Customer Name", "type": "text", "required": True},
             {"key": "mobile", "label": "Mobile", "type": "phone", "required": True},
@@ -450,13 +450,13 @@ def get_form(code: str, db: Session = Depends(get_db)):
             "key": "construction_building_name",
             "label": "Construction / Building Name",
             "type": "text",
-            "required": False,
+            "required": True,
         },
         {
             "key": "office_address",
             "label": "Office Address",
             "type": "textarea",
-            "required": False,
+            "required": True,
         },
         {
             "key": "site_address",
@@ -464,12 +464,12 @@ def get_form(code: str, db: Session = Depends(get_db)):
             "type": "textarea",
             "required": False,
         },
-        {"key": "location", "label": "Location", "type": "map", "required": False},
+        {"key": "location", "label": "Location", "type": "map", "required": True},
             {"key": "building_type", "label": "Building Type", "type": "dropdown", "required": False,
              "options": [x["value"] for x in active_master_values(db, BuildingTypeMaster, "building_type")]},
             {"key": "lift_type", "label": "Lift Type", "type": "dropdown", "required": False,
              "options": [x["value"] for x in active_master_values(db, LiftTypeMaster, "lift_type")]},
-            {"key": "collector_view", "label": "Executive View", "type": "dropdown", "required": False,
+            {"key": "collector_view", "label": "Executive View", "type": "dropdown", "required": True,
              "options": [
                  "Negative",
                  "Positive",
@@ -478,7 +478,7 @@ def get_form(code: str, db: Session = Depends(get_db)):
                  "No Person Present",
                  "Contact for Next Project",
              ]},
-            {"key": "collector_remarks", "label": "Executive Remarks", "type": "dropdown", "required": False,
+            {"key": "collector_remarks", "label": "Executive Remarks", "type": "dropdown", "required": True,
              "options": [
                  "Take Some Time",
                  "May be Possible",
@@ -763,4 +763,5 @@ def marketing_report(db: Session = Depends(get_db)):
 
 # Common Bulk Import API
 app.include_router(bulk_import_router)
+
 
