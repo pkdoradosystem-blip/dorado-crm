@@ -467,7 +467,14 @@ def get_form(code: str, db: Session = Depends(get_db)):
         "fields": [
             {"key": "lead_date", "label": "Lead Date", "type": "date", "required": True},
             {"key": "lead_collector_name", "label": "Executive Name", "type": "dropdown", "required": True,
-             "options": [x["value"] for x in employee_options(db)]},
+             "options": [
+                 x["value"]
+                 for x in employee_options(db)
+                 if (
+                     "marketing" in str(x.get("department") or "").lower()
+                     or "sales" in str(x.get("department") or "").lower()
+                 )
+             ]},
             {"key": "lead_source", "label": "Lead Source", "type": "dropdown", "required": True,
              "options": [x["value"] for x in common_master_options(db, "LEAD_SOURCE")]},
             {"key": "customer_name", "label": "Customer Name", "type": "text", "required": True},
