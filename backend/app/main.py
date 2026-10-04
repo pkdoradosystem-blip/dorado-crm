@@ -525,6 +525,22 @@ def create_lead(payload: dict[str, Any], db: Session = Depends(get_db)):
     if not mobile:
         raise HTTPException(status_code=400, detail="Mobile Number is required")
 
+    # Manual Lead Entry must contain at least one site/building image.
+    image_values = [
+        payload.get("image_1"),
+        payload.get("image_2"),
+        payload.get("image_3"),
+    ]
+
+    if not any(
+        value is not None and str(value).strip()
+        for value in image_values
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Please add at least one site/building image",
+        )
+
     now = datetime.now()
     display_id = get_next_display_lead_id(db)
 
