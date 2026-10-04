@@ -147,6 +147,37 @@ MASTER_SEED = {
         ],
     },
 
+    "EXECUTIVE_VIEW": {
+        "name": "Executive View",
+        "description": "Executive assessment of lead",
+        "display_order": 9,
+        "allow_global": True,
+        "values": [
+            "Negative",
+            "Positive",
+            "Customer has Fixed Company",
+            "Customer Not Interested",
+            "No Person Present",
+            "Contact for Next Project",
+        ],
+    },
+
+    "EXECUTIVE_REMARKS": {
+        "name": "Executive Remarks",
+        "description": "Standard executive lead remarks",
+        "display_order": 10,
+        "allow_global": True,
+        "values": [
+            "Take Some Time",
+            "May be Possible",
+            "Visit with Senior",
+            "Site Stop Now",
+            "Site Stop but Open Nearly",
+            "Order Given to Others",
+            "Please Call Next Week",
+        ],
+    },
+
     "LEAD_PRIORITY": {
         "name": "Lead Priority",
         "description": "Sales lead priority",

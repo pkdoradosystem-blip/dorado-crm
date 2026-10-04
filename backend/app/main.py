@@ -1,4 +1,4 @@
-﻿from .bulk_import_api import router as bulk_import_router
+from .bulk_import_api import router as bulk_import_router
 from datetime import datetime
 from typing import Any
 import uuid
@@ -14,6 +14,7 @@ from .models import (
     Lead,
     LeadActivity,
     EmployeeMaster,
+    MasterData,
     LeadSourceMaster,
     BuildingTypeMaster,
     LiftTypeMaster,
@@ -281,6 +282,31 @@ def active_master_values(db: Session, model, value_field: str):
     ]
 
 
+def common_master_options(db: Session, master_type_id: str):
+    rows = (
+        db.query(MasterData)
+        .filter(
+            MasterData.master_type_id == master_type_id,
+            MasterData.active.is_(True),
+        )
+        .order_by(
+            MasterData.display_order,
+            MasterData.name,
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": row.id,
+            "value": row.name,
+            "label": row.name,
+        }
+        for row in rows
+        if row.name and str(row.name).strip()
+    ]
+
+
 def employee_options(db: Session, designation_keyword: str | None = None):
     query = db.query(EmployeeMaster).filter(EmployeeMaster.active.is_(True))
     rows = query.order_by(EmployeeMaster.employee_name).all()
@@ -441,9 +467,9 @@ def get_form(code: str, db: Session = Depends(get_db)):
         "fields": [
             {"key": "lead_date", "label": "Lead Date", "type": "date", "required": True},
             {"key": "lead_collector_name", "label": "Executive Name", "type": "dropdown", "required": True,
-             "options": [x["value"] for x in employee_options(db, "lead collector")]},
+             "options": [x["value"] for x in employee_options(db)]},
             {"key": "lead_source", "label": "Lead Source", "type": "dropdown", "required": True,
-             "options": [x["value"] for x in active_master_values(db, LeadSourceMaster, "lead_source")]},
+             "options": [x["value"] for x in common_master_options(db, "LEAD_SOURCE")]},
             {"key": "customer_name", "label": "Customer Name", "type": "text", "required": True},
             {"key": "mobile", "label": "Mobile", "type": "phone", "required": True},
             {
@@ -466,35 +492,20 @@ def get_form(code: str, db: Session = Depends(get_db)):
         },
         {"key": "location", "label": "Location", "type": "map", "required": True},
             {"key": "building_type", "label": "Building Type", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in active_master_values(db, BuildingTypeMaster, "building_type")]},
+             "options": [x["value"] for x in common_master_options(db, "BUILDING_TYPE")]},
             {"key": "lift_type", "label": "Lift Type", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in active_master_values(db, LiftTypeMaster, "lift_type")]},
+             "options": [x["value"] for x in common_master_options(db, "LIFT_TYPE")]},
             {"key": "collector_view", "label": "Executive View", "type": "dropdown", "required": True,
-             "options": [
-                 "Negative",
-                 "Positive",
-                 "Customer has Fixed Company",
-                 "Customer Not Interested",
-                 "No Person Present",
-                 "Contact for Next Project",
-             ]},
+             "options": [x["value"] for x in common_master_options(db, "EXECUTIVE_VIEW")]},
             {"key": "collector_remarks", "label": "Executive Remarks", "type": "dropdown", "required": True,
-             "options": [
-                 "Take Some Time",
-                 "May be Possible",
-                 "Visit with Senior",
-                 "Site Stop Now",
-                 "Site Stop but Open Nearly",
-                 "Order Given to Others",
-                 "Please Call Next Week",
-             ]},
+             "options": [x["value"] for x in common_master_options(db, "EXECUTIVE_REMARKS")]},
             {"key": "follow_up_date", "label": "Follow-up Date", "type": "date", "required": False},
             {"key": "image_1", "label": "Image 1", "type": "image", "required": False},
             {"key": "image_2", "label": "Image 2", "type": "image", "required": False},
             {"key": "image_3", "label": "Image 3", "type": "image", "required": False},
             {"key": "marketing_head", "label": "Assigned Marketing Head", "type": "auto", "required": False, "readOnly": True},
             {"key": "lead_priority", "label": "Lead Priority", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in active_master_values(db, LeadPriorityMaster, "lead_priority")]},
+             "options": [x["value"] for x in common_master_options(db, "LEAD_PRIORITY")]},
         ],
     }
 
