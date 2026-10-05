@@ -2,6 +2,7 @@ from .bulk_import_api import router as bulk_import_router
 from datetime import datetime
 from typing import Any
 import uuid
+import json
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,8 @@ from .admin_api import router as admin_router, sync_foundation_data
 from .models import (
     Lead,
     LeadActivity,
+    QuotationMaster,
+    QuotationLiftItem,
     EmployeeMaster,
     MasterData,
     LeadSourceMaster,
@@ -394,6 +397,36 @@ def health():
 
 @app.get("/api/v1/menus")
 def get_menus():
+    # Keep the base menu definition unchanged.
+    # Add Quotation to Sales & Marketing if it is not
+    # already present.
+    for menu in MENUS:
+        if str(menu.get("title", "")).strip().lower() != "sales & marketing":
+            continue
+
+        children = menu.setdefault("children", [])
+
+        quotation_exists = any(
+            str(child.get("title", "")).strip().lower()
+            in {"quotation", "quotations"}
+            for child in children
+        )
+
+        if not quotation_exists:
+            children.append(
+                {
+                    "id": "quotation",
+                    "title": "Quotation",
+                    "subtitle": "Create & manage customer quotations",
+                    "icon": "quotation",
+                    "routeType": "page",
+                    "routeName": "quotation",
+                    "children": [],
+                }
+            )
+
+        break
+
     return MENUS
 
 
@@ -696,6 +729,1299 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db)):
         "success": True,
         "message": "Lead deleted successfully",
     }
+
+
+
+
+# ---------------------------------------------------------
+# QUOTATION FORM DEFINITIONS
+# ---------------------------------------------------------
+
+QUOTATION_TYPES = [
+    {
+        "id": "TRACTION",
+        "name": "Traction Lift",
+    },
+    {
+        "id": "GOODS",
+        "name": "Goods Lift",
+    },
+    {
+        "id": "HYDRAULIC",
+        "name": "Hydraulic Lift",
+    },
+    {
+        "id": "MRL_1_PHASE",
+        "name": "MRL Lift - 1 Phase",
+    },
+    {
+        "id": "MRL_3_PHASE",
+        "name": "MRL Lift - 3 Phase",
+    },
+    {
+        "id": "MRL_STRUCTURE",
+        "name": "MRL with Structure / Civil / Covering",
+    },
+]
+
+
+TRACTION_QUOTATION_FIELDS = [
+    {
+        "key": "lift_type",
+        "label": "Lift Type",
+        "type": "dropdown",
+        "master_type": "LIFT_TYPE",
+        "required": True,
+    },
+    {
+        "key": "number_of_floor",
+        "label": "Number of Floor",
+        "type": "dropdown",
+        "master_type": "FLOOR_TYPE",
+        "required": True,
+    },
+    {
+        "key": "no_of_stops",
+        "label": "No of Stops",
+        "type": "number",
+        "required": True,
+    },
+    {
+        "key": "no_of_opening",
+        "label": "No of Opening",
+        "type": "number",
+        "required": True,
+    },
+    {
+        "key": "ard_required",
+        "label": "ARD Required",
+        "type": "choice",
+        "options": ["YES", "NO"],
+        "required": True,
+    },
+    {
+        "key": "entrance_opening",
+        "label": "Entrance Opening",
+        "type": "dropdown",
+        "master_type": "ENTRANCE_OPENING",
+        "required": True,
+    },
+    {
+        "key": "total_height",
+        "label": "Total Height",
+        "type": "number",
+        "required": True,
+    },
+    {
+        "key": "landing_door_type",
+        "label": "Landing Door Type",
+        "type": "dropdown",
+        "master_type": "LANDING_DOOR_TYPE",
+        "required": True,
+    },
+    {
+        "key": "car_door_type",
+        "label": "Car Door Type",
+        "type": "dropdown",
+        "master_type": "CAR_DOOR_TYPE",
+        "required": True,
+    },
+    {
+        "key": "door_operation",
+        "label": "Door Operation",
+        "type": "choice",
+        "options": ["Manual", "Auto"],
+        "required": True,
+    },
+    {
+        "key": "car_enclosure",
+        "label": "Car Enclosure",
+        "type": "dropdown",
+        "master_type": "CAR_ENCLOSURE",
+        "required": True,
+    },
+    {
+        "key": "overhead",
+        "label": "Overhead",
+        "type": "dropdown",
+        "master_type": "OVERHEAD",
+        "required": True,
+    },
+    {
+        "key": "shaft_width",
+        "label": "Shaft Width",
+        "type": "number",
+        "required": False,
+    },
+    {
+        "key": "shaft_depth",
+        "label": "Shaft Depth",
+        "type": "number",
+        "required": False,
+    },
+    {
+        "key": "person_capacity",
+        "label": "Person Capacity",
+        "type": "dropdown",
+        "master_type": "PERSON_CAPACITY",
+        "required": True,
+    },
+
+    # Commercial inputs from current quotation form.
+    {
+        "key": "price_including_gst",
+        "label": "Price including GST",
+        "type": "number",
+        "required": True,
+    },
+    {
+        "key": "license_fee",
+        "label": "License Fee",
+        "type": "dropdown",
+        "master_type": "LICENSE_FEE",
+        "required": True,
+    },
+    {
+        "key": "quotation_validity",
+        "label": "Quotation Validity",
+        "type": "dropdown",
+        "master_type": "QUOTATION_VALIDITY",
+        "required": True,
+    },
+    {
+        "key": "cabin_model_no",
+        "label": "Cabine Model No.",
+        "type": "text",
+        "required": False,
+    },
+    {
+        "key": "extra_payment",
+        "label": "Extra Payment",
+        "type": "text",
+        "required": False,
+    },
+]
+
+
+def quotation_fields_for_type(
+    quotation_type: str,
+):
+    quotation_type = str(
+        quotation_type or ""
+    ).strip().upper()
+
+    # Traction is the first fully configured format.
+    if quotation_type == "TRACTION":
+        return TRACTION_QUOTATION_FIELDS
+
+    # Other formats will receive their own technical
+    # definitions without changing the quotation engine.
+    return []
+
+
+@app.get("/api/v1/quotation-types")
+def get_quotation_types():
+    return QUOTATION_TYPES
+
+
+@app.get("/api/v1/quotation-form-definition")
+def get_quotation_form_definition(
+    quotation_type: str = "TRACTION",
+    db: Session = Depends(get_db),
+):
+    fields = quotation_fields_for_type(
+        quotation_type
+    )
+
+    if not fields:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Quotation format is not configured yet"
+            ),
+        )
+
+    result = []
+
+    for definition in fields:
+        field = dict(definition)
+
+        master_type = field.get(
+            "master_type"
+        )
+
+        if master_type:
+            field["options"] = (
+                common_master_options(
+                    db,
+                    master_type,
+                )
+            )
+
+        result.append(field)
+
+    return {
+        "quotation_type": quotation_type,
+        "fields": result,
+    }
+
+
+# ---------------------------------------------------------
+# SALES QUOTATION
+# ---------------------------------------------------------
+
+
+def quotation_to_dict(
+    quotation: QuotationMaster,
+    db: Session,
+) -> dict[str, Any]:
+
+    data = {
+        column.name: _iso(getattr(quotation, column.name))
+        for column in QuotationMaster.__table__.columns
+    }
+
+    items = (
+        db.query(QuotationLiftItem)
+        .filter(
+            QuotationLiftItem.quotation_id == quotation.id,
+            QuotationLiftItem.active.is_(True),
+        )
+        .order_by(
+            QuotationLiftItem.display_order,
+            QuotationLiftItem.item_no,
+            QuotationLiftItem.id,
+        )
+        .all()
+    )
+
+    data["items"] = [
+        {
+            column.name: _iso(getattr(item, column.name))
+            for column in QuotationLiftItem.__table__.columns
+        }
+        for item in items
+    ]
+
+    return data
+
+
+def next_quotation_number(db: Session) -> str:
+    year = datetime.now().year
+
+    rows = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.quotation_no.like(
+                f"Q-{year}-%"
+            )
+        )
+        .all()
+    )
+
+    highest = 0
+
+    for row in rows:
+        try:
+            number = int(
+                str(row.quotation_no).split("-")[-1]
+            )
+            highest = max(highest, number)
+        except (TypeError, ValueError):
+            continue
+
+    return f"Q-{year}-{highest + 1:04d}"
+
+
+def quotation_amounts(
+    items: list[dict[str, Any]],
+    discount_amount: float,
+    gst_percent: float,
+):
+    basic_amount = 0.0
+
+    for item in items:
+        try:
+            quantity = int(item.get("quantity") or 1)
+        except (TypeError, ValueError):
+            quantity = 1
+
+        try:
+            unit_price = float(
+                item.get("unit_price") or 0
+            )
+        except (TypeError, ValueError):
+            unit_price = 0.0
+
+        basic_amount += quantity * unit_price
+
+    taxable_amount = max(
+        basic_amount - discount_amount,
+        0.0,
+    )
+
+    gst_amount = (
+        taxable_amount * gst_percent / 100.0
+    )
+
+    grand_total = taxable_amount + gst_amount
+
+    return (
+        basic_amount,
+        taxable_amount,
+        gst_amount,
+        grand_total,
+    )
+
+
+
+@app.get("/api/v1/quotations/prefill/{lead_id}")
+def quotation_prefill(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead_or_404(db, lead_id)
+
+    return {
+        "lead_id": lead.id,
+        "lead_display_id": lead.lead_id,
+
+        "lead_collection_by":
+            lead.lead_collector_name,
+
+        "marketing_by":
+            lead.marketing_head,
+
+        "customer_name":
+            lead.customer_name,
+
+        "construction_building_name":
+            lead.construction_building_name,
+
+        "contact_no":
+            lead.mobile,
+
+        "office_address":
+            lead.office_address,
+
+        "site_address":
+            lead.site_address,
+
+        "location":
+            lead.location,
+
+        "lift_type":
+            lead.lift_type,
+
+        "quotation_type":
+            "TRACTION",
+    }
+
+
+@app.get("/api/v1/quotations")
+def list_quotations(
+    lead_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(QuotationMaster).filter(
+        QuotationMaster.active.is_(True)
+    )
+
+    if lead_id is not None:
+        query = query.filter(
+            QuotationMaster.lead_id == lead_id
+        )
+
+    rows = query.order_by(
+        QuotationMaster.id.desc()
+    ).all()
+
+    return [
+        quotation_to_dict(row, db)
+        for row in rows
+    ]
+
+
+@app.get("/api/v1/quotations/{quotation_id}")
+def get_quotation(
+    quotation_id: int,
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.id == quotation_id,
+            QuotationMaster.active.is_(True),
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation not found",
+        )
+
+    return quotation_to_dict(row, db)
+
+
+@app.post("/api/v1/quotations")
+def create_quotation(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    # -----------------------------------------------------
+    # LEAD
+    # -----------------------------------------------------
+
+    lead_id = payload.get("lead_id")
+
+    if lead_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Lead ID is required",
+        )
+
+    try:
+        lead_id = int(lead_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Lead ID",
+        )
+
+    lead = get_lead_or_404(
+        db,
+        lead_id,
+    )
+
+    # -----------------------------------------------------
+    # QUOTATION TYPE
+    # -----------------------------------------------------
+
+    quotation_type = str(
+        payload.get("quotation_type")
+        or "TRACTION"
+    ).strip().upper()
+
+    valid_types = {
+        row["id"]
+        for row in QUOTATION_TYPES
+    }
+
+    if quotation_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid quotation type",
+        )
+
+    # Only Traction is fully configured at this stage.
+    if quotation_type != "TRACTION":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This quotation format is not configured yet"
+            ),
+        )
+
+    # -----------------------------------------------------
+    # TECHNICAL DATA
+    # -----------------------------------------------------
+
+    technical_data = payload.get(
+        "technical_data"
+    ) or {}
+
+    if not isinstance(
+        technical_data,
+        dict,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid technical data",
+        )
+
+    definitions = quotation_fields_for_type(
+        quotation_type
+    )
+
+    missing_fields = []
+
+    for definition in definitions:
+        if not definition.get("required"):
+            continue
+
+        key = definition["key"]
+
+        # Commercial fields are validated separately.
+        if key in {
+            "price_including_gst",
+            "license_fee",
+            "quotation_validity",
+            "cabin_model_no",
+            "extra_payment",
+        }:
+            continue
+
+        value = technical_data.get(key)
+
+        if value is None or not str(value).strip():
+            missing_fields.append(
+                definition["label"]
+            )
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Required quotation fields missing: "
+                + ", ".join(missing_fields)
+            ),
+        )
+
+    # -----------------------------------------------------
+    # COMMERCIAL DATA
+    # -----------------------------------------------------
+
+    commercial_data = payload.get(
+        "commercial_data"
+    ) or {}
+
+    if not isinstance(
+        commercial_data,
+        dict,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid commercial data",
+        )
+
+    price_value = (
+        commercial_data.get(
+            "price_including_gst"
+        )
+        if "price_including_gst"
+        in commercial_data
+        else payload.get(
+            "price_including_gst"
+        )
+    )
+
+    try:
+        price_including_gst = float(
+            price_value or 0
+        )
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid quotation price",
+        )
+
+    if price_including_gst <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Price including GST is required",
+        )
+
+    license_fee = (
+        commercial_data.get("license_fee")
+        or payload.get("license_fee")
+    )
+
+    quotation_validity = (
+        commercial_data.get(
+            "quotation_validity"
+        )
+        or payload.get(
+            "quotation_validity"
+        )
+    )
+
+    if not str(
+        license_fee or ""
+    ).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="License Fee is required",
+        )
+
+    if not str(
+        quotation_validity or ""
+    ).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Quotation Validity is required",
+        )
+
+    commercial_data[
+        "price_including_gst"
+    ] = price_including_gst
+
+    commercial_data[
+        "license_fee"
+    ] = license_fee
+
+    commercial_data[
+        "quotation_validity"
+    ] = quotation_validity
+
+    commercial_data[
+        "cabin_model_no"
+    ] = (
+        commercial_data.get(
+            "cabin_model_no"
+        )
+        or payload.get(
+            "cabin_model_no"
+        )
+    )
+
+    commercial_data[
+        "extra_payment"
+    ] = (
+        commercial_data.get(
+            "extra_payment"
+        )
+        or payload.get(
+            "extra_payment"
+        )
+    )
+
+    # -----------------------------------------------------
+    # GST BREAKDOWN
+    #
+    # Current Google Form price is already INCLUDING GST.
+    # Therefore do NOT add another 18%.
+    # -----------------------------------------------------
+
+    try:
+        gst_percent = float(
+            payload.get("gst_percent")
+            or 18
+        )
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid GST percentage",
+        )
+
+    divisor = 1 + (
+        gst_percent / 100
+    )
+
+    taxable_amount = (
+        price_including_gst / divisor
+        if divisor > 0
+        else price_including_gst
+    )
+
+    gst_amount = (
+        price_including_gst
+        - taxable_amount
+    )
+
+    now = datetime.now()
+
+    # -----------------------------------------------------
+    # SAVE HEADER
+    # -----------------------------------------------------
+
+    quotation = QuotationMaster(
+        quotation_no=next_quotation_number(
+            db
+        ),
+        revision_no=0,
+
+        quotation_type=quotation_type,
+
+        power_type=(
+            "1_PHASE"
+            if quotation_type ==
+                "MRL_1_PHASE"
+            else
+            "3_PHASE"
+            if quotation_type ==
+                "MRL_3_PHASE"
+            else None
+        ),
+
+        template_code=quotation_type,
+
+        technical_data=json.dumps(
+            technical_data,
+            ensure_ascii=False,
+        ),
+
+        commercial_data=json.dumps(
+            commercial_data,
+            ensure_ascii=False,
+        ),
+
+        lead_id=lead.id,
+
+        quotation_date=now,
+
+        valid_until=parse_datetime(
+            payload.get("valid_until")
+        ),
+
+        status="Draft",
+
+        # Snapshot from Lead.
+        customer_name=
+            lead.customer_name,
+
+        construction_building_name=
+            lead.construction_building_name,
+
+        mobile=lead.mobile,
+
+        office_address=
+            lead.office_address,
+
+        site_address=
+            lead.site_address,
+
+        location=lead.location,
+
+        # Price entered in current Google Form
+        # is already GST inclusive.
+        basic_amount=taxable_amount,
+
+        discount_amount=0,
+
+        taxable_amount=taxable_amount,
+
+        gst_percent=gst_percent,
+
+        gst_amount=gst_amount,
+
+        grand_total=
+            price_including_gst,
+
+        payment_terms=payload.get(
+            "payment_terms"
+        ),
+
+        delivery_period=payload.get(
+            "delivery_period"
+        ),
+
+        installation_terms=payload.get(
+            "installation_terms"
+        ),
+
+        warranty_terms=payload.get(
+            "warranty_terms"
+        ),
+
+        free_maintenance=payload.get(
+            "free_maintenance"
+        ),
+
+        remarks=payload.get(
+            "remarks"
+        ),
+
+        terms_conditions=payload.get(
+            "terms_conditions"
+        ),
+
+        created_by=payload.get(
+            "created_by"
+        ),
+
+        created_at=now,
+        updated_at=now,
+        active=True,
+    )
+
+    db.add(quotation)
+    db.flush()
+
+    # -----------------------------------------------------
+    # ONE PRIMARY LIFT ITEM
+    # -----------------------------------------------------
+
+    item = QuotationLiftItem(
+        quotation_id=quotation.id,
+        item_no=1,
+
+        lift_name=(
+            technical_data.get(
+                "lift_type"
+            )
+            or lead.lift_type
+            or "Lift"
+        ),
+
+        quantity=1,
+
+        capacity_persons=
+            technical_data.get(
+                "person_capacity"
+            ),
+
+        floors=
+            technical_data.get(
+                "number_of_floor"
+            ),
+
+        stops=
+            technical_data.get(
+                "no_of_stops"
+            ),
+
+        travel_height=
+            technical_data.get(
+                "total_height"
+            ),
+
+        lift_type=
+            technical_data.get(
+                "lift_type"
+            ),
+
+        door_type=
+            technical_data.get(
+                "landing_door_type"
+            ),
+
+        door_opening=
+            technical_data.get(
+                "entrance_opening"
+            ),
+
+        ard=
+            technical_data.get(
+                "ard_required"
+            ),
+
+        cabin_finish=
+            technical_data.get(
+                "car_enclosure"
+            ),
+
+        car_door=
+            technical_data.get(
+                "car_door_type"
+            ),
+
+        landing_door=
+            technical_data.get(
+                "landing_door_type"
+            ),
+
+        technical_data=json.dumps(
+            technical_data,
+            ensure_ascii=False,
+        ),
+
+        unit_price=
+            price_including_gst,
+
+        total_price=
+            price_including_gst,
+
+        display_order=1,
+
+        created_at=now,
+        updated_at=now,
+        active=True,
+    )
+
+    db.add(item)
+
+    # -----------------------------------------------------
+    # UPDATE SALES PIPELINE
+    # -----------------------------------------------------
+
+    lead.quotation_given = True
+    lead.quotation_date = now
+
+    if (
+        not lead.order_finalized
+        and not lead.order_lost
+    ):
+        lead.lead_status = "Quotation"
+
+    lead.updated_at = now
+
+    db.commit()
+    db.refresh(quotation)
+
+    return quotation_to_dict(
+        quotation,
+        db,
+    )
+
+
+@app.put("/api/v1/quotations/{quotation_id}")
+def update_quotation(
+    quotation_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    quotation = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.id == quotation_id,
+            QuotationMaster.active.is_(True),
+        )
+        .first()
+    )
+
+    if quotation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation not found",
+        )
+
+    editable_fields = {
+        "valid_until",
+        "status",
+        "discount_amount",
+        "gst_percent",
+        "payment_terms",
+        "delivery_period",
+        "installation_terms",
+        "warranty_terms",
+        "free_maintenance",
+        "remarks",
+        "terms_conditions",
+    }
+
+    for key in editable_fields:
+        if key not in payload:
+            continue
+
+        value = payload.get(key)
+
+        if key == "valid_until":
+            value = parse_datetime(value)
+
+        if key in {
+            "discount_amount",
+            "gst_percent",
+        }:
+            try:
+                value = float(value or 0)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid {key}",
+                )
+
+        setattr(
+            quotation,
+            key,
+            value,
+        )
+
+    items = payload.get("items")
+
+    if items is not None:
+        if not isinstance(items, list) or not items:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one lift item is required",
+            )
+
+        (
+            basic_amount,
+            taxable_amount,
+            gst_amount,
+            grand_total,
+        ) = quotation_amounts(
+            items,
+            float(
+                quotation.discount_amount or 0
+            ),
+            float(
+                quotation.gst_percent or 0
+            ),
+        )
+
+        existing_items = (
+            db.query(QuotationLiftItem)
+            .filter(
+                QuotationLiftItem.quotation_id ==
+                    quotation.id
+            )
+            .all()
+        )
+
+        for existing in existing_items:
+            existing.active = False
+
+        now = datetime.now()
+
+        for index, item_data in enumerate(
+            items,
+            start=1,
+        ):
+            quantity = int(
+                item_data.get("quantity") or 1
+            )
+            unit_price = float(
+                item_data.get("unit_price") or 0
+            )
+
+            db.add(
+                QuotationLiftItem(
+                    quotation_id=quotation.id,
+                    item_no=index,
+                    lift_name=item_data.get(
+                        "lift_name"
+                    ),
+                    quantity=quantity,
+                    capacity_persons=item_data.get(
+                        "capacity_persons"
+                    ),
+                    capacity_kg=item_data.get(
+                        "capacity_kg"
+                    ),
+                    floors=item_data.get("floors"),
+                    stops=item_data.get("stops"),
+                    travel_height=item_data.get(
+                        "travel_height"
+                    ),
+                    lift_type=item_data.get(
+                        "lift_type"
+                    ),
+                    installation_type=item_data.get(
+                        "installation_type"
+                    ),
+                    door_type=item_data.get(
+                        "door_type"
+                    ),
+                    door_opening=item_data.get(
+                        "door_opening"
+                    ),
+                    speed=item_data.get("speed"),
+                    machine=item_data.get(
+                        "machine"
+                    ),
+                    controller=item_data.get(
+                        "controller"
+                    ),
+                    ard=item_data.get("ard"),
+                    cabin_finish=item_data.get(
+                        "cabin_finish"
+                    ),
+                    car_door=item_data.get(
+                        "car_door"
+                    ),
+                    landing_door=item_data.get(
+                        "landing_door"
+                    ),
+                    cop_lop=item_data.get(
+                        "cop_lop"
+                    ),
+                    flooring=item_data.get(
+                        "flooring"
+                    ),
+                    item_description=item_data.get(
+                        "item_description"
+                    ),
+                    unit_price=unit_price,
+                    total_price=quantity * unit_price,
+                    display_order=index,
+                    created_at=now,
+                    updated_at=now,
+                    active=True,
+                )
+            )
+
+        quotation.basic_amount = basic_amount
+        quotation.taxable_amount = taxable_amount
+        quotation.gst_amount = gst_amount
+        quotation.grand_total = grand_total
+
+    else:
+        basic = float(
+            quotation.basic_amount or 0
+        )
+        discount = float(
+            quotation.discount_amount or 0
+        )
+        gst_percent = float(
+            quotation.gst_percent or 0
+        )
+
+        taxable = max(
+            basic - discount,
+            0,
+        )
+
+        quotation.taxable_amount = taxable
+        quotation.gst_amount = (
+            taxable * gst_percent / 100
+        )
+        quotation.grand_total = (
+            taxable + quotation.gst_amount
+        )
+
+    quotation.updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(quotation)
+
+    return quotation_to_dict(
+        quotation,
+        db,
+    )
+
+
+@app.post("/api/v1/quotations/{quotation_id}/revision")
+def revise_quotation(
+    quotation_id: int,
+    db: Session = Depends(get_db),
+):
+    source = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.id == quotation_id,
+            QuotationMaster.active.is_(True),
+        )
+        .first()
+    )
+
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation not found",
+        )
+
+    latest_revision = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.quotation_no ==
+                source.quotation_no
+        )
+        .order_by(
+            QuotationMaster.revision_no.desc()
+        )
+        .first()
+    )
+
+    revision_no = (
+        int(latest_revision.revision_no) + 1
+        if latest_revision
+        else 1
+    )
+
+    now = datetime.now()
+
+    revised = QuotationMaster(
+        quotation_no=source.quotation_no,
+        revision_no=revision_no,
+        lead_id=source.lead_id,
+        quotation_date=now,
+        valid_until=source.valid_until,
+        status="Draft",
+
+        customer_name=source.customer_name,
+        construction_building_name=
+            source.construction_building_name,
+        mobile=source.mobile,
+        office_address=source.office_address,
+        site_address=source.site_address,
+        location=source.location,
+
+        basic_amount=source.basic_amount,
+        discount_amount=source.discount_amount,
+        taxable_amount=source.taxable_amount,
+        gst_percent=source.gst_percent,
+        gst_amount=source.gst_amount,
+        grand_total=source.grand_total,
+
+        payment_terms=source.payment_terms,
+        delivery_period=source.delivery_period,
+        installation_terms=
+            source.installation_terms,
+        warranty_terms=source.warranty_terms,
+        free_maintenance=
+            source.free_maintenance,
+        remarks=source.remarks,
+        terms_conditions=
+            source.terms_conditions,
+
+        created_by=source.created_by,
+        created_at=now,
+        updated_at=now,
+        active=True,
+    )
+
+    db.add(revised)
+    db.flush()
+
+    source_items = (
+        db.query(QuotationLiftItem)
+        .filter(
+            QuotationLiftItem.quotation_id ==
+                source.id,
+            QuotationLiftItem.active.is_(True),
+        )
+        .order_by(
+            QuotationLiftItem.display_order
+        )
+        .all()
+    )
+
+    for item in source_items:
+        db.add(
+            QuotationLiftItem(
+                quotation_id=revised.id,
+                item_no=item.item_no,
+                lift_name=item.lift_name,
+                quantity=item.quantity,
+                capacity_persons=
+                    item.capacity_persons,
+                capacity_kg=item.capacity_kg,
+                floors=item.floors,
+                stops=item.stops,
+                travel_height=
+                    item.travel_height,
+                lift_type=item.lift_type,
+                installation_type=
+                    item.installation_type,
+                door_type=item.door_type,
+                door_opening=
+                    item.door_opening,
+                speed=item.speed,
+                machine=item.machine,
+                controller=item.controller,
+                ard=item.ard,
+                cabin_finish=
+                    item.cabin_finish,
+                car_door=item.car_door,
+                landing_door=
+                    item.landing_door,
+                cop_lop=item.cop_lop,
+                flooring=item.flooring,
+                item_description=
+                    item.item_description,
+                unit_price=item.unit_price,
+                total_price=item.total_price,
+                display_order=
+                    item.display_order,
+                created_at=now,
+                updated_at=now,
+                active=True,
+            )
+        )
+
+    source.status = "Revised"
+    source.updated_at = now
+
+    db.commit()
+    db.refresh(revised)
+
+    return quotation_to_dict(
+        revised,
+        db,
+    )
 
 
 # ---------------------------------------------------------

@@ -108,6 +108,179 @@ class LeadActivity(Base):
     created_at = Column(DateTime, nullable=False)
 
 
+
+# =========================================================
+# SALES QUOTATION
+# =========================================================
+
+class QuotationMaster(Base):
+    __tablename__ = "quotation_master"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    quotation_no = Column(String(50), nullable=False, index=True)
+    revision_no = Column(Integer, default=0, nullable=False)
+
+    # =====================================================
+    # QUOTATION FORMAT
+    # =====================================================
+    # TRACTION
+    # GOODS
+    # HYDRAULIC
+    # MRL
+    # MRL_STRUCTURE
+
+    quotation_type = Column(
+        String(50),
+        default="TRACTION",
+        nullable=False,
+        index=True,
+    )
+
+    # Used mainly for MRL quotations:
+    # 1_PHASE / 3_PHASE
+    power_type = Column(String(30), nullable=True)
+
+    # Template/version used to generate the quotation.
+    template_code = Column(String(100), nullable=True)
+
+    # Full technical snapshot in JSON text.
+    # Keeps historical quotations unchanged even if
+    # Data Master values are modified later.
+    technical_data = Column(Text, nullable=True)
+
+    # Optional commercial/custom data snapshot.
+    commercial_data = Column(Text, nullable=True)
+
+    # Link with CRM Lead.
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+
+    quotation_date = Column(DateTime, default=datetime.now, nullable=False)
+    valid_until = Column(DateTime, nullable=True)
+
+    status = Column(String(30), default="Draft", nullable=False)
+
+    # Snapshot of customer details at quotation time.
+    customer_name = Column(String(200), nullable=False)
+    construction_building_name = Column(String(255), nullable=True)
+    mobile = Column(String(30), nullable=True)
+    office_address = Column(Text, nullable=True)
+    site_address = Column(Text, nullable=True)
+    location = Column(String(250), nullable=True)
+
+    # Commercial summary.
+    basic_amount = Column(Float, default=0)
+    discount_amount = Column(Float, default=0)
+    taxable_amount = Column(Float, default=0)
+
+    gst_percent = Column(Float, default=18)
+    gst_amount = Column(Float, default=0)
+    grand_total = Column(Float, default=0)
+
+    payment_terms = Column(Text, nullable=True)
+    delivery_period = Column(String(250), nullable=True)
+    installation_terms = Column(Text, nullable=True)
+    warranty_terms = Column(Text, nullable=True)
+    free_maintenance = Column(String(250), nullable=True)
+
+    remarks = Column(Text, nullable=True)
+    terms_conditions = Column(Text, nullable=True)
+
+    created_by = Column(String(30), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        nullable=False,
+    )
+
+    active = Column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "quotation_no",
+            "revision_no",
+            name="uq_quotation_revision",
+        ),
+    )
+
+
+class QuotationLiftItem(Base):
+    __tablename__ = "quotation_lift_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    quotation_id = Column(
+        Integer,
+        ForeignKey("quotation_master.id"),
+        nullable=False,
+        index=True,
+    )
+
+    item_no = Column(Integer, default=1, nullable=False)
+
+    lift_name = Column(String(150), nullable=True)
+    quantity = Column(Integer, default=1, nullable=False)
+
+    capacity_persons = Column(Integer, nullable=True)
+    capacity_kg = Column(Float, nullable=True)
+
+    floors = Column(String(100), nullable=True)
+    stops = Column(Integer, nullable=True)
+    travel_height = Column(Float, nullable=True)
+
+    lift_type = Column(String(150), nullable=True)
+    installation_type = Column(String(150), nullable=True)
+
+    door_type = Column(String(150), nullable=True)
+    door_opening = Column(String(100), nullable=True)
+
+    speed = Column(String(100), nullable=True)
+    machine = Column(String(200), nullable=True)
+    controller = Column(String(200), nullable=True)
+    ard = Column(String(100), nullable=True)
+
+    cabin_finish = Column(String(200), nullable=True)
+    car_door = Column(String(200), nullable=True)
+    landing_door = Column(String(200), nullable=True)
+
+    cop_lop = Column(String(250), nullable=True)
+    flooring = Column(String(200), nullable=True)
+
+    item_description = Column(Text, nullable=True)
+
+    # Type-specific technical specification snapshot.
+    #
+    # Example:
+    # TRACTION -> machine room / rope / motor
+    # GOODS -> goods cabin / collapsible gate / load
+    # HYDRAULIC -> power pack / cylinder
+    # MRL -> gearless machine / phase
+    # MRL_STRUCTURE -> structure + civil + covering
+    technical_data = Column(Text, nullable=True)
+
+    # Structure / Civil / Covering details where applicable.
+    structure_data = Column(Text, nullable=True)
+    civil_data = Column(Text, nullable=True)
+    covering_data = Column(Text, nullable=True)
+
+    unit_price = Column(Float, default=0)
+    total_price = Column(Float, default=0)
+
+    display_order = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        nullable=False,
+    )
+
+    active = Column(Boolean, default=True, nullable=False)
+
+
 # =========================================================
 # EMPLOYEE / USER MASTER
 # Existing table kept compatible

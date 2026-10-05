@@ -11,7 +11,7 @@ import '../leads/follow_up_page.dart';
 
 import '../sales/targets_page.dart';
 import '../sales/marketing_reports_page.dart';
-
+import '../sales/quotation/quotation_list_page.dart';
 
 class DynamicMenuPage extends StatefulWidget {
   final String title;
@@ -28,12 +28,10 @@ class DynamicMenuPage extends StatefulWidget {
   });
 
   @override
-  State<DynamicMenuPage> createState() =>
-      _DynamicMenuPageState();
+  State<DynamicMenuPage> createState() => _DynamicMenuPageState();
 }
 
-class _DynamicMenuPageState
-    extends State<DynamicMenuPage> {
+class _DynamicMenuPageState extends State<DynamicMenuPage> {
   bool _loading = true;
   String? _error;
 
@@ -65,8 +63,7 @@ class _DynamicMenuPageState
 
     // Root menu from backend.
     try {
-      final items =
-          await widget.menuService.loadMenus();
+      final items = await widget.menuService.loadMenus();
 
       if (!mounted) return;
 
@@ -93,11 +90,9 @@ class _DynamicMenuPageState
     BuildContext context,
     MenuItemModel item,
   ) {
-    final itemId =
-        item.id.trim().toLowerCase();
+    final itemId = item.id.trim().toLowerCase();
 
-    final itemTitle =
-        item.title.trim().toLowerCase();
+    final itemTitle = item.title.trim().toLowerCase();
 
     // =======================================================
     // SALES & MARKETING
@@ -110,10 +105,8 @@ class _DynamicMenuPageState
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              DynamicFormPage(
-            formCode:
-                item.formCode!,
+          builder: (_) => DynamicFormPage(
+            formCode: item.formCode!,
             title: item.title,
           ),
         ),
@@ -150,6 +143,24 @@ class _DynamicMenuPageState
     }
 
     // =======================================================
+    // QUOTATION
+    // =======================================================
+
+    if (itemId == 'quotation' ||
+        itemId == 'quotations' ||
+        itemTitle == 'quotation' ||
+        itemTitle == 'quotations') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const QuotationListPage(),
+        ),
+      );
+
+      return;
+    }
+
+    // =======================================================
     // FOLLOW-UP
     // =======================================================
 
@@ -179,17 +190,14 @@ class _DynamicMenuPageState
     // MARKETING REPORTS
     // =======================================================
 
-    if (itemId ==
-            'marketing_reports' ||
-        itemId ==
-            'marketing-reports' ||
-        itemTitle ==
-            'marketing reports') {
+    if (itemId == 'marketing_reports' ||
+        itemId == 'marketing-reports' ||
+        itemTitle == 'marketing reports') {
       _openMarketingReports();
 
       return;
     }
-    
+
     // =======================================================
     // GENERIC SUBMENU
     //
@@ -205,8 +213,7 @@ class _DynamicMenuPageState
     // Reports
     // =======================================================
 
-    if (item.routeType ==
-        'submenu') {
+    if (item.routeType == 'submenu') {
       if (item.children.isEmpty) {
         _showComingSoon(
           item.title,
@@ -218,15 +225,11 @@ class _DynamicMenuPageState
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              DynamicMenuPage(
+          builder: (_) => DynamicMenuPage(
             title: item.title,
-            menuItems:
-                item.children,
-            menuService:
-                widget.menuService,
-            formService:
-                widget.formService,
+            menuItems: item.children,
+            menuService: widget.menuService,
+            formService: widget.formService,
           ),
         ),
       );
@@ -251,10 +254,8 @@ class _DynamicMenuPageState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            AllLeadsPage(
-          leadService:
-              LeadService(
+        builder: (_) => AllLeadsPage(
+          leadService: LeadService(
             ApiClient(),
           ),
         ),
@@ -270,10 +271,8 @@ class _DynamicMenuPageState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            FollowUpPage(
-          leadService:
-              LeadService(
+        builder: (_) => FollowUpPage(
+          leadService: LeadService(
             ApiClient(),
           ),
         ),
@@ -286,17 +285,17 @@ class _DynamicMenuPageState
   // =========================================================
 
   void _openTargets() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => TargetsPage(
-        leadService: LeadService(
-          ApiClient(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TargetsPage(
+          leadService: LeadService(
+            ApiClient(),
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // =========================================================
   // MARKETING REPORTS
@@ -306,10 +305,8 @@ class _DynamicMenuPageState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            MarketingReportsPage(
-          leadService:
-              LeadService(
+        builder: (_) => MarketingReportsPage(
+          leadService: LeadService(
             ApiClient(),
           ),
         ),
@@ -324,8 +321,7 @@ class _DynamicMenuPageState
   void _showComingSoon(
     String title,
   ) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '$title screen will be connected later.',
@@ -341,116 +337,93 @@ class _DynamicMenuPageState
   IconData _getIcon(
     String icon,
   ) {
-    switch (
-        icon.trim().toLowerCase()) {
+    switch (icon.trim().toLowerCase()) {
       // Sales
       case 'sales':
-        return Icons
-            .trending_up_rounded;
+        return Icons.trending_up_rounded;
 
       // Lead Entry
       case 'add':
-        return Icons
-            .add_circle_outline_rounded;
+        return Icons.add_circle_outline_rounded;
 
       // All Leads
       case 'list':
-        return Icons
-            .format_list_bulleted_rounded;
+        return Icons.format_list_bulleted_rounded;
 
       // Lead Update
       case 'edit':
-        return Icons
-            .edit_note_rounded;
+        return Icons.edit_note_rounded;
 
       // Follow-up
       case 'followup':
-        return Icons
-            .event_repeat_rounded;
+        return Icons.event_repeat_rounded;
 
       // Target
       case 'target':
-        return Icons
-            .track_changes_rounded;
+        return Icons.track_changes_rounded;
 
       // Report
       case 'report':
-        return Icons
-            .analytics_outlined;
+        return Icons.analytics_outlined;
 
       // Installation
       case 'installation':
-        return Icons
-            .apartment_rounded;
+        return Icons.apartment_rounded;
 
       // Repair
       case 'repair':
-        return Icons
-            .build_outlined;
+        return Icons.build_outlined;
 
       // AMC Service
       case 'service':
-        return Icons
-            .miscellaneous_services_rounded;
+        return Icons.miscellaneous_services_rounded;
 
       // Production
       case 'production':
-        return Icons
-            .precision_manufacturing_outlined;
+        return Icons.precision_manufacturing_outlined;
 
       // Accounts
       case 'accounts':
-        return Icons
-            .account_balance_wallet_outlined;
+        return Icons.account_balance_wallet_outlined;
 
       // Office
       case 'office':
-        return Icons
-            .business_center_outlined;
+        return Icons.business_center_outlined;
 
       // Performance
       case 'performance':
-        return Icons
-            .speed_rounded;
+        return Icons.speed_rounded;
 
       // Dashboard
       case 'dashboard':
-        return Icons
-            .dashboard_outlined;
+        return Icons.dashboard_outlined;
 
       // Customer
       case 'customer':
-        return Icons
-            .people_outline_rounded;
+        return Icons.people_outline_rounded;
 
       // Planning
       case 'planning':
-        return Icons
-            .calendar_month_outlined;
+        return Icons.calendar_month_outlined;
 
       // Breakdown
       case 'breakdown':
-        return Icons
-            .engineering_outlined;
+        return Icons.engineering_outlined;
 
       // Feedback
       case 'feedback':
-        return Icons
-            .rate_review_outlined;
+        return Icons.rate_review_outlined;
 
       // Store
       case 'store':
-        return Icons
-            .inventory_2_outlined;
+        return Icons.inventory_2_outlined;
 
       // Payment
       case 'payment':
-        return Icons
-            .payments_outlined;
+        return Icons.payments_outlined;
 
       default:
-        return Icons
-            .folder_outlined;
+        return Icons.folder_outlined;
     }
   }
 
@@ -463,32 +436,22 @@ class _DynamicMenuPageState
     BuildContext context,
   ) {
     return Scaffold(
-      backgroundColor:
-          const Color(
+      backgroundColor: const Color(
         0xFFF4F7FB,
       ),
-
       appBar: AppBar(
-        backgroundColor:
-            const Color(
+        backgroundColor: const Color(
           0xFF0B5C9E,
         ),
-
-        foregroundColor:
-            Colors.white,
-
+        foregroundColor: Colors.white,
         elevation: 0,
-
         title: Text(
           widget.title,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.w600,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
-
       body: _buildBody(),
     );
   }
@@ -504,8 +467,7 @@ class _DynamicMenuPageState
 
     if (_loading) {
       return const Center(
-        child:
-            CircularProgressIndicator(),
+        child: CircularProgressIndicator(),
       );
     }
 
@@ -516,51 +478,37 @@ class _DynamicMenuPageState
     if (_error != null) {
       return Center(
         child: Padding(
-          padding:
-              const EdgeInsets.all(
+          padding: const EdgeInsets.all(
             24,
           ),
-
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
-
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons
-                    .error_outline,
+                Icons.error_outline,
                 size: 48,
-                color:
-                    Colors.redAccent,
+                color: Colors.redAccent,
               ),
-
               const SizedBox(
                 height: 12,
               ),
-
               const Text(
                 'Unable to load menu',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-
               const SizedBox(
                 height: 8,
               ),
-
               Text(
                 _error!,
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
               ),
-
               const SizedBox(
                 height: 20,
               ),
-
               ElevatedButton.icon(
                 onPressed: () {
                   setState(() {
@@ -570,14 +518,10 @@ class _DynamicMenuPageState
 
                   _loadMenu();
                 },
-
-                icon:
-                    const Icon(
+                icon: const Icon(
                   Icons.refresh,
                 ),
-
-                label:
-                    const Text(
+                label: const Text(
                   'Retry',
                 ),
               ),
@@ -605,80 +549,50 @@ class _DynamicMenuPageState
 
     return RefreshIndicator(
       onRefresh: _loadMenu,
-
-      child:
-          ListView.separated(
-        padding:
-            const EdgeInsets.all(
+      child: ListView.separated(
+        padding: const EdgeInsets.all(
           16,
         ),
-
-        itemCount:
-            _items.length,
-
-        separatorBuilder:
-            (_, __) =>
-                const SizedBox(
+        itemCount: _items.length,
+        separatorBuilder: (_, __) => const SizedBox(
           height: 8,
         ),
-
-        itemBuilder:
-            (
+        itemBuilder: (
           context,
           index,
         ) {
-          final item =
-              _items[index];
+          final item = _items[index];
 
           return Material(
-            color:
-                Colors.white,
-
-            borderRadius:
-                BorderRadius
-                    .circular(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(
               10,
             ),
-
             child: InkWell(
-              borderRadius:
-                  BorderRadius
-                      .circular(
+              borderRadius: BorderRadius.circular(
                 10,
               ),
-
               onTap: () {
                 _openItem(
                   context,
                   item,
                 );
               },
-
               child: Container(
-                padding:
-                    const EdgeInsets
-                        .symmetric(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 12,
                 ),
-
-                decoration:
-                    BoxDecoration(
-                  borderRadius:
-                      BorderRadius
-                          .circular(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(
                     10,
                   ),
-
-                  border:
-                      Border.all(
-                    color:
-                        const Color(
+                  border: Border.all(
+                    color: const Color(
                       0xFFE6EBF1,
                     ),
                   ),
                 ),
-
                 child: Row(
                   children: [
                     // =======================================
@@ -688,31 +602,21 @@ class _DynamicMenuPageState
                     Container(
                       width: 42,
                       height: 42,
-
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            const Color(
+                      decoration: BoxDecoration(
+                        color: const Color(
                           0xFFEAF3FA,
                         ),
-
-                        borderRadius:
-                            BorderRadius
-                                .circular(
+                        borderRadius: BorderRadius.circular(
                           9,
                         ),
                       ),
-
                       child: Icon(
                         _getIcon(
                           item.icon,
                         ),
-
-                        color:
-                            const Color(
+                        color: const Color(
                           0xFF0B5C9E,
                         ),
-
                         size: 22,
                       ),
                     ),
@@ -727,47 +631,27 @@ class _DynamicMenuPageState
 
                     Expanded(
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             item.title,
-
-                            style:
-                                const TextStyle(
-                              fontSize:
-                                  15.5,
-
-                              fontWeight:
-                                  FontWeight
-                                      .w600,
-
-                              color:
-                                  Color(
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(
                                 0xFF17212B,
                               ),
                             ),
                           ),
-
-                          if (item
-                              .subtitle
-                              .isNotEmpty) ...[
+                          if (item.subtitle.isNotEmpty) ...[
                             const SizedBox(
                               height: 3,
                             ),
-
                             Text(
                               item.subtitle,
-
-                              style:
-                                  const TextStyle(
-                                fontSize:
-                                    12.5,
-
-                                color:
-                                    Color(
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: Color(
                                   0xFF6B7785,
                                 ),
                               ),
@@ -786,11 +670,8 @@ class _DynamicMenuPageState
                     // =======================================
 
                     const Icon(
-                      Icons
-                          .chevron_right_rounded,
-
-                      color:
-                          Color(
+                      Icons.chevron_right_rounded,
+                      color: Color(
                         0xFF8C98A4,
                       ),
                     ),

@@ -175,3 +175,16 @@ if __name__ == "__main__":
 
     if result.returncode != 0:
         raise SystemExit(result.returncode)
+
+# ---------------------------------------------------------
+# QUOTATION MIGRATION
+# ---------------------------------------------------------
+
+result = subprocess.run(
+    [sys.executable, "migrate_quotation.py"],
+    check=False,
+)
+
+if result.returncode != 0:
+    raise SystemExit(result.returncode)
+
