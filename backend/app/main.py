@@ -777,7 +777,7 @@ TRACTION_QUOTATION_FIELDS = [
         "key": "number_of_floor",
         "label": "Number of Floor",
         "type": "dropdown",
-        "master_type": "FLOOR_TYPE",
+        "master_type": "NO_OF_FLOOR",
         "required": True,
     },
     {
@@ -791,6 +791,19 @@ TRACTION_QUOTATION_FIELDS = [
         "label": "No of Opening",
         "type": "number",
         "required": True,
+    },
+    {
+        "key": "opening_side",
+        "label": "Opening Side",
+        "type": "choice",
+        "options": ["All Same Side", "Different Side"],
+        "required": True,
+    },
+    {
+        "key": "opening_side_details",
+        "label": "Opening Side Details",
+        "type": "text",
+        "required": False,
     },
     {
         "key": "ard_required",

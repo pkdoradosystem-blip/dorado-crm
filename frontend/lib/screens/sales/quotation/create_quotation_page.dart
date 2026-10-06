@@ -275,6 +275,61 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
         .toList();
   }
 
+  int? _floorStopCount(String? value) {
+    if (value == null) return null;
+
+    final text = value.trim().toUpperCase().replaceAll(' ', '');
+
+    if (text.isEmpty) return null;
+
+    // Supported examples:
+    // G to 3              = G + 1 + 2 + 3 = 4 stops
+    // B1 + G to 3         = B1 + G + 1 + 2 + 3 = 5 stops
+    // B2 + B1 + G to 3    = B2 + B1 + G + 1 + 2 + 3 = 6 stops
+
+    final upperMatch = RegExp(
+      r'G(?:\+|TO|-)?(\d+)$',
+    ).firstMatch(text);
+
+    if (upperMatch != null) {
+      final upper = int.tryParse(upperMatch.group(1)!);
+
+      if (upper != null) {
+        var stops = upper + 1; // Ground + upper floors
+
+        if (text.contains('B1')) {
+          stops += 1;
+        }
+
+        if (text.contains('B2')) {
+          stops += 1;
+        }
+
+        return stops;
+      }
+    }
+
+    final plain = int.tryParse(text);
+
+    if (plain != null && plain > 0) {
+      return plain;
+    }
+
+    return null;
+  }
+
+  void _applyFloorCalculation(String? floor) {
+    final count = _floorStopCount(floor);
+
+    if (count == null) return;
+
+    _controllers['no_of_stops']?.text = count.toString();
+
+    _controllers['no_of_opening']?.text = count.toString();
+
+    setState(() {});
+  }
+
   Widget _buildDynamicField(
     Map<String, dynamic> field,
   ) {
@@ -285,17 +340,27 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
 
     final displayLabel = required ? '$label *' : label;
 
+    if (key == 'opening_side_details' &&
+        _values['opening_side'] != 'Different Side') {
+      return const SizedBox.shrink();
+    }
+
     if (type == 'dropdown' || type == 'choice') {
       final options = _options(field);
 
       return Padding(
-        padding: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.only(bottom: 8),
         child: DropdownButtonFormField<String>(
           initialValue: _values[key],
           isExpanded: true,
           decoration: InputDecoration(
             labelText: displayLabel,
             border: const OutlineInputBorder(),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 11,
+            ),
           ),
           items: options
               .map(
@@ -318,6 +383,18 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
               : null,
           onChanged: (value) {
             _values[key] = value;
+
+            if (key == 'number_of_floor') {
+              _applyFloorCalculation(value);
+            }
+
+            if (key == 'opening_side') {
+              setState(() {
+                if (value != 'Different Side') {
+                  _controllers['opening_side_details']?.clear();
+                }
+              });
+            }
           },
         ),
       );
@@ -331,9 +408,10 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
     final isNumber = type == 'number';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 8),
       child: TextFormField(
         controller: controller,
+        readOnly: key == 'no_of_stops',
         keyboardType: isNumber
             ? const TextInputType.numberWithOptions(
                 decimal: true,
@@ -342,6 +420,11 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
         decoration: InputDecoration(
           labelText: displayLabel,
           border: const OutlineInputBorder(),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 11,
+          ),
         ),
         validator: (value) {
           final text = value?.trim() ?? '';
@@ -536,6 +619,48 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
     return '$id • $customer';
   }
 
+  Widget _responsiveFieldGrid(
+    List<Map<String, dynamic>> fields,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 760;
+
+        if (!twoColumns) {
+          return Column(
+            children: fields.map(_buildDynamicField).toList(),
+          );
+        }
+
+        final rows = <Widget>[];
+
+        for (var i = 0; i < fields.length; i += 2) {
+          final left = fields[i];
+          final hasRight = i + 1 < fields.length;
+
+          rows.add(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildDynamicField(left),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: hasRight
+                      ? _buildDynamicField(fields[i + 1])
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(children: rows);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final technicalFields = _fields
@@ -564,11 +689,11 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(10),
           children: [
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -579,7 +704,7 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     if (_loadingLeads)
                       const Center(
                         child: CircularProgressIndicator(),
@@ -681,10 +806,10 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -695,7 +820,7 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       initialValue: _quotationType,
                       isExpanded: true,
@@ -725,7 +850,7 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                               });
                             },
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -747,16 +872,16 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
               ),
             ),
             if (_loadingForm) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
               const Center(
                 child: CircularProgressIndicator(),
               ),
             ],
             if (technicalFields.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -770,8 +895,8 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                       const SizedBox(
                         height: 18,
                       ),
-                      ...technicalFields.map(
-                        _buildDynamicField,
+                      _responsiveFieldGrid(
+                        technicalFields,
                       ),
                     ],
                   ),
@@ -779,10 +904,10 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
               ),
             ],
             if (commercialFields.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -796,8 +921,8 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
                       const SizedBox(
                         height: 18,
                       ),
-                      ...commercialFields.map(
-                        _buildDynamicField,
+                      _responsiveFieldGrid(
+                        commercialFields,
                       ),
                     ],
                   ),
@@ -805,9 +930,9 @@ class _CreateQuotationPageState extends State<CreateQuotationPage> {
               ),
             ],
             if (_fields.isNotEmpty) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 54,
+                height: 44,
                 child: ElevatedButton.icon(
                   onPressed: _saving ? null : _saveDraft,
                   icon: _saving
