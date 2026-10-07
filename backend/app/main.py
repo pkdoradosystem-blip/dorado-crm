@@ -15,6 +15,7 @@ from .models import (
     Lead,
     LeadActivity,
     QuotationMaster,
+    QuotationTemplate,
     QuotationLiftItem,
     EmployeeMaster,
     MasterData,
@@ -979,6 +980,343 @@ def get_quotation_form_definition(
     }
 
 
+
+# ---------------------------------------------------------
+# QUOTATION TEMPLATE MASTER
+# ---------------------------------------------------------
+
+
+def quotation_template_to_dict(row: QuotationTemplate):
+    return {
+        column.name: _iso(getattr(row, column.name))
+        for column in QuotationTemplate.__table__.columns
+    }
+
+
+@app.get("/api/v1/quotation-templates")
+def list_quotation_templates(
+    quotation_type: str | None = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    query = db.query(QuotationTemplate)
+
+    if quotation_type:
+        query = query.filter(
+            QuotationTemplate.quotation_type ==
+            quotation_type.strip().upper()
+        )
+
+    if active_only:
+        query = query.filter(
+            QuotationTemplate.active.is_(True)
+        )
+
+    rows = query.order_by(
+        QuotationTemplate.quotation_type,
+        QuotationTemplate.template_code,
+        QuotationTemplate.version_no.desc(),
+    ).all()
+
+    return [
+        quotation_template_to_dict(row)
+        for row in rows
+    ]
+
+
+@app.get("/api/v1/quotation-templates/default/{quotation_type}")
+def get_default_quotation_template(
+    quotation_type: str,
+    db: Session = Depends(get_db),
+):
+    qtype = quotation_type.strip().upper()
+
+    row = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.quotation_type == qtype,
+            QuotationTemplate.is_default.is_(True),
+            QuotationTemplate.active.is_(True),
+        )
+        .order_by(
+            QuotationTemplate.version_no.desc()
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Default quotation template not found",
+        )
+
+    return quotation_template_to_dict(row)
+
+
+@app.get("/api/v1/quotation-templates/{template_id}")
+def get_quotation_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.id == template_id
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation template not found",
+        )
+
+    return quotation_template_to_dict(row)
+
+
+@app.post("/api/v1/quotation-templates")
+def create_quotation_template(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    template_code = str(
+        payload.get("template_code") or ""
+    ).strip().upper()
+
+    template_name = str(
+        payload.get("template_name") or ""
+    ).strip()
+
+    quotation_type = str(
+        payload.get("quotation_type") or "TRACTION"
+    ).strip().upper()
+
+    if not template_code:
+        raise HTTPException(
+            status_code=400,
+            detail="Template code is required",
+        )
+
+    if not template_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Template name is required",
+        )
+
+    latest = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.template_code ==
+            template_code
+        )
+        .order_by(
+            QuotationTemplate.version_no.desc()
+        )
+        .first()
+    )
+
+    version_no = (
+        int(latest.version_no) + 1
+        if latest
+        else 1
+    )
+
+    is_default = bool(
+        payload.get("is_default", False)
+    )
+
+    if is_default:
+        existing_defaults = (
+            db.query(QuotationTemplate)
+            .filter(
+                QuotationTemplate.quotation_type ==
+                quotation_type,
+                QuotationTemplate.is_default.is_(True),
+            )
+            .all()
+        )
+
+        for existing in existing_defaults:
+            existing.is_default = False
+
+    now = datetime.now()
+
+    row = QuotationTemplate(
+        template_code=template_code,
+        template_name=template_name,
+        quotation_type=quotation_type,
+        version_no=version_no,
+        template_content=payload.get(
+            "template_content"
+        ),
+        layout_config=payload.get(
+            "layout_config"
+        ),
+        is_default=is_default,
+        active=True,
+        created_by=payload.get("created_by"),
+        created_at=now,
+        updated_by=payload.get("created_by"),
+        updated_at=now,
+    )
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return quotation_template_to_dict(row)
+
+
+@app.put("/api/v1/quotation-templates/{template_id}")
+def create_quotation_template_version(
+    template_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    source = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.id == template_id
+        )
+        .first()
+    )
+
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation template not found",
+        )
+
+    latest = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.template_code ==
+            source.template_code
+        )
+        .order_by(
+            QuotationTemplate.version_no.desc()
+        )
+        .first()
+    )
+
+    version_no = (
+        int(latest.version_no) + 1
+        if latest
+        else int(source.version_no) + 1
+    )
+
+    is_default = bool(
+        payload.get(
+            "is_default",
+            source.is_default,
+        )
+    )
+
+    if is_default:
+        existing_defaults = (
+            db.query(QuotationTemplate)
+            .filter(
+                QuotationTemplate.quotation_type ==
+                source.quotation_type,
+                QuotationTemplate.is_default.is_(True),
+            )
+            .all()
+        )
+
+        for existing in existing_defaults:
+            existing.is_default = False
+
+    now = datetime.now()
+
+    row = QuotationTemplate(
+        template_code=source.template_code,
+        template_name=str(
+            payload.get(
+                "template_name",
+                source.template_name,
+            )
+        ).strip(),
+        quotation_type=source.quotation_type,
+        version_no=version_no,
+        template_content=payload.get(
+            "template_content",
+            source.template_content,
+        ),
+        layout_config=payload.get(
+            "layout_config",
+            source.layout_config,
+        ),
+        is_default=is_default,
+        active=True,
+        created_by=source.created_by,
+        created_at=now,
+        updated_by=payload.get("updated_by"),
+        updated_at=now,
+    )
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return quotation_template_to_dict(row)
+
+
+@app.put("/api/v1/quotation-templates/{template_id}/active")
+def set_quotation_template_active(
+    template_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.id == template_id
+        )
+        .first()
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation template not found",
+        )
+
+    row.active = bool(
+        payload.get("active", True)
+    )
+    row.updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(row)
+
+    return quotation_template_to_dict(row)
+
+
+
+
+def get_default_template_for_quotation(
+    db: Session,
+    quotation_type: str,
+):
+    qtype = str(
+        quotation_type or ""
+    ).strip().upper()
+
+    return (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.quotation_type == qtype,
+            QuotationTemplate.is_default.is_(True),
+            QuotationTemplate.active.is_(True),
+        )
+        .order_by(
+            QuotationTemplate.version_no.desc()
+        )
+        .first()
+    )
+
+
 # ---------------------------------------------------------
 # SALES QUOTATION
 # ---------------------------------------------------------
@@ -1153,6 +1491,185 @@ def list_quotations(
         quotation_to_dict(row, db)
         for row in rows
     ]
+
+
+
+def _quotation_json_dict(value):
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, str) and value.strip():
+        try:
+            decoded = json.loads(value)
+            if isinstance(decoded, dict):
+                return decoded
+        except Exception:
+            pass
+
+    return {}
+
+
+def _quotation_template_value(
+    quotation,
+    technical,
+    commercial,
+    path,
+):
+    if not path:
+        return ""
+
+    if path.startswith("technical_data."):
+        key = path.split(".", 1)[1]
+        return technical.get(key, "")
+
+    if path.startswith("commercial_data."):
+        key = path.split(".", 1)[1]
+        return commercial.get(key, "")
+
+    return getattr(quotation, path, "") or ""
+
+
+def _render_template_object(
+    value,
+    values,
+):
+    if isinstance(value, str):
+        rendered = value
+
+        for placeholder, replacement in values.items():
+            rendered = rendered.replace(
+                placeholder,
+                str(replacement or ""),
+            )
+
+        return rendered
+
+    if isinstance(value, list):
+        return [
+            _render_template_object(item, values)
+            for item in value
+        ]
+
+    if isinstance(value, dict):
+        return {
+            key: _render_template_object(item, values)
+            for key, item in value.items()
+        }
+
+    return value
+
+
+@app.get("/api/v1/quotations/{quotation_id}/preview")
+def quotation_preview(
+    quotation_id: int,
+    db: Session = Depends(get_db),
+):
+    quotation = (
+        db.query(QuotationMaster)
+        .filter(
+            QuotationMaster.id == quotation_id,
+            QuotationMaster.active.is_(True),
+        )
+        .first()
+    )
+
+    if quotation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quotation not found",
+        )
+
+    if (
+        not quotation.template_code
+        or not quotation.template_version
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Quotation template is not locked",
+        )
+
+    template = (
+        db.query(QuotationTemplate)
+        .filter(
+            QuotationTemplate.template_code ==
+            quotation.template_code,
+            QuotationTemplate.version_no ==
+            quotation.template_version,
+        )
+        .first()
+    )
+
+    if template is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Locked quotation template not found",
+        )
+
+    technical = _quotation_json_dict(
+        quotation.technical_data
+    )
+
+    commercial = _quotation_json_dict(
+        quotation.commercial_data
+    )
+
+    content = _quotation_json_dict(
+        template.template_content
+    )
+
+    layout = _quotation_json_dict(
+        template.layout_config
+    )
+
+    placeholder_map = layout.get(
+        "placeholder_map",
+        {},
+    )
+
+    values = {}
+
+    for placeholder, source_path in placeholder_map.items():
+        values[placeholder] = _quotation_template_value(
+            quotation,
+            technical,
+            commercial,
+            source_path,
+        )
+
+    rendered_content = _render_template_object(
+        content,
+        values,
+    )
+
+    return {
+        "quotation_id": quotation.id,
+        "quotation_no": quotation.quotation_no,
+        "revision_no": quotation.revision_no,
+
+        "template": {
+            "id": template.id,
+            "template_code": template.template_code,
+            "template_name": template.template_name,
+            "version_no": template.version_no,
+        },
+
+        "customer": {
+            "customer_name": quotation.customer_name,
+            "construction_building_name":
+                quotation.construction_building_name,
+            "mobile": quotation.mobile,
+            "office_address": quotation.office_address,
+            "site_address": quotation.site_address,
+            "location": quotation.location,
+        },
+
+        "technical_data": technical,
+        "commercial_data": commercial,
+
+        "content": rendered_content,
+        "layout": layout,
+    }
+
 
 
 @app.get("/api/v1/quotations/{quotation_id}")
@@ -1439,6 +1956,20 @@ def create_quotation(
     # SAVE HEADER
     # -----------------------------------------------------
 
+    default_template = get_default_template_for_quotation(
+        db,
+        quotation_type,
+    )
+
+    if default_template is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No active default quotation template "
+                f"configured for {quotation_type}"
+            ),
+        )
+
     quotation = QuotationMaster(
         quotation_no=next_quotation_number(
             db
@@ -1446,6 +1977,8 @@ def create_quotation(
         revision_no=0,
 
         quotation_type=quotation_type,
+        template_code=default_template.template_code,
+        template_version=default_template.version_no,
 
         power_type=(
             "1_PHASE"
@@ -1458,7 +1991,6 @@ def create_quotation(
             else None
         ),
 
-        template_code=quotation_type,
 
         technical_data=json.dumps(
             technical_data,

@@ -162,29 +162,42 @@ def migrate_employee_master():
 if __name__ == "__main__":
     migrate_employee_master()
 
-# Run Lead address migration after employee profile migration.
-# Kept here so existing Render Start Command does not need manual change.
+
+# =========================================================
+# STARTUP MIGRATION CHAIN
+# Render Start Command runs this file.
+# Each child migration is safe to run more than once.
+# =========================================================
+
 if __name__ == "__main__":
     import subprocess
     import sys
 
-    result = subprocess.run(
-        [sys.executable, "migrate_lead_addresses.py"],
-        check=False,
-    )
+    migration_scripts = [
+        "migrate_lead_addresses.py",
+        "migrate_quotation.py",
+        "migrate_quotation_template.py",
+        "migrate_quotation_template_version.py",
+        "seed_quotation_template.py",
+        "backfill_quotation_template.py",
+    ]
 
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
+    for script in migration_scripts:
+        print("")
+        print(f"RUNNING: {script}")
 
-# ---------------------------------------------------------
-# QUOTATION MIGRATION
-# ---------------------------------------------------------
+        result = subprocess.run(
+            [sys.executable, script],
+            check=False,
+        )
 
-result = subprocess.run(
-    [sys.executable, "migrate_quotation.py"],
-    check=False,
-)
+        if result.returncode != 0:
+            print(f"FAILED : {script}")
+            raise SystemExit(result.returncode)
 
-if result.returncode != 0:
-    raise SystemExit(result.returncode)
+        print(f"PASSED : {script}")
 
+    print("")
+    print("=========================================")
+    print("ALL STARTUP MIGRATIONS PASSED")
+    print("=========================================")

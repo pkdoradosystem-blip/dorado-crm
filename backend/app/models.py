@@ -142,7 +142,9 @@ class QuotationMaster(Base):
     power_type = Column(String(30), nullable=True)
 
     # Template/version used to generate the quotation.
+    # Historical quotations remain linked to the exact template version.
     template_code = Column(String(100), nullable=True)
+    template_version = Column(Integer, nullable=True)
 
     # Full technical snapshot in JSON text.
     # Keeps historical quotations unchanged even if
@@ -202,6 +204,54 @@ class QuotationMaster(Base):
             "quotation_no",
             "revision_no",
             name="uq_quotation_revision",
+        ),
+    )
+
+
+class QuotationTemplate(Base):
+    __tablename__ = "quotation_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    template_code = Column(String(100), nullable=False, index=True)
+    template_name = Column(String(200), nullable=False)
+
+    quotation_type = Column(
+        String(50),
+        default="TRACTION",
+        nullable=False,
+        index=True,
+    )
+
+    version_no = Column(Integer, default=1, nullable=False)
+
+    # Editable document content / layout definition.
+    # Stored separately from quotation transaction data.
+    template_content = Column(Text, nullable=True)
+
+    # Optional JSON configuration for page/layout settings,
+    # placeholder definitions and future PDF rendering.
+    layout_config = Column(Text, nullable=True)
+
+    is_default = Column(Boolean, default=False, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+
+    created_by = Column(String(30), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    updated_by = Column(String(30), nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "template_code",
+            "version_no",
+            name="uq_quotation_template_version",
         ),
     )
 
