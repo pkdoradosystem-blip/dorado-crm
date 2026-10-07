@@ -9,8 +9,7 @@ def backfill():
         template = (
             db.query(QuotationTemplate)
             .filter(
-                QuotationTemplate.template_code ==
-                "TRACTION_DEFAULT",
+                QuotationTemplate.template_code == "TRACTION_DEFAULT",
                 QuotationTemplate.version_no == 1,
             )
             .first()
@@ -24,8 +23,7 @@ def backfill():
         rows = (
             db.query(QuotationMaster)
             .filter(
-                QuotationMaster.quotation_type ==
-                "TRACTION"
+                QuotationMaster.quotation_type == "TRACTION"
             )
             .all()
         )
@@ -33,22 +31,36 @@ def backfill():
         updated = 0
 
         for quotation in rows:
-            if not quotation.template_code:
+            old_code = (
+                quotation.template_code or ""
+            ).strip().upper()
+
+            # Repair quotations created before the
+            # versioned template system was introduced.
+            if old_code in {
+                "",
+                "TRACTION",
+            }:
                 quotation.template_code = (
                     template.template_code
                 )
-
-            if not quotation.template_version:
                 quotation.template_version = (
                     template.version_no
                 )
+                updated += 1
 
-            updated += 1
+            elif quotation.template_code == template.template_code:
+                if not quotation.template_version:
+                    quotation.template_version = (
+                        template.version_no
+                    )
+                    updated += 1
 
         db.commit()
 
         print("QUOTATION TEMPLATE BACKFILL PASSED")
         print(f"Traction quotations checked: {len(rows)}")
+        print(f"Quotations updated: {updated}")
         print(f"Template: {template.template_code}")
         print(f"Version: {template.version_no}")
 
