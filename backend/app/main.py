@@ -1644,6 +1644,7 @@ def quotation_preview(
     return {
         "quotation_id": quotation.id,
         "quotation_no": quotation.quotation_no,
+        "quotation_date": quotation.quotation_date.isoformat() if quotation.quotation_date else None,
         "revision_no": quotation.revision_no,
 
         "template": {
