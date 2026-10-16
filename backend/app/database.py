@@ -1,13 +1,15 @@
 import os
+from pathlib import Path
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATABASE_PATH = BASE_DIR / "dorado_crm.db"
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./dorado_crm.db",
-)
+    "DATABASE_URL"
+) or ("sqlite:///" + DATABASE_PATH.as_posix())
 
 connect_args = {}
 

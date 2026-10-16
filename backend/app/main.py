@@ -1,3 +1,4 @@
+import math
 from .bulk_import_api import router as bulk_import_router
 from datetime import datetime
 from typing import Any
@@ -1925,15 +1926,23 @@ def create_quotation(
     # Therefore do NOT add another 18%.
     # -----------------------------------------------------
 
+    gst_value = payload.get("gst_percent", 18)
+
+    if gst_value is None or gst_value == "":
+        gst_value = 18
+
     try:
-        gst_percent = float(
-            payload.get("gst_percent")
-            or 18
-        )
+        gst_percent = float(gst_value)
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=400,
             detail="Invalid GST percentage",
+        )
+
+    if not math.isfinite(gst_percent) or not 0 <= gst_percent <= 100:
+        raise HTTPException(
+            status_code=400,
+            detail="GST percentage must be between 0 and 100",
         )
 
     divisor = 1 + (
@@ -2665,3 +2674,10 @@ def marketing_report(db: Session = Depends(get_db)):
 app.include_router(bulk_import_router)
 
 
+# -----------------------------------------------------
+# DORADO LIFT IMAGE LIBRARY
+# -----------------------------------------------------
+from app.lift_image_library.router import router as lift_image_router
+app.include_router(lift_image_router)
+from app.quotation_image_api import router as quotation_image_router
+app.include_router(quotation_image_router)
