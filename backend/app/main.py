@@ -2681,3 +2681,9 @@ from app.lift_image_library.router import router as lift_image_router
 app.include_router(lift_image_router)
 from app.quotation_image_api import router as quotation_image_router
 app.include_router(quotation_image_router)
+
+# -----------------------------------------------------
+# DORADO WORD QUOTATION SYSTEM
+# -----------------------------------------------------
+from app.quotation_word_api import router as quotation_word_router
+app.include_router(quotation_word_router)
