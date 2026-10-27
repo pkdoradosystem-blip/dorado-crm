@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -19,6 +19,7 @@ if DATABASE_URL.startswith("sqlite"):
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
+    pool_pre_ping=True,
 )
 
 SessionLocal = sessionmaker(
@@ -36,3 +37,4 @@ def get_db():
         yield db
     finally:
         db.close()
+
