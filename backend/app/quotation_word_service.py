@@ -105,6 +105,83 @@ def build_word_quotation(quotation, template_bytes):
     for key, value in commercial.items():
         context.setdefault(key, value)
 
+
+    # -----------------------------------------------
+    # DORADO TECHNICAL FIELD MAPPING
+    # -----------------------------------------------
+    aliases = {
+        "capacity": "person_capacity",
+        "passenger_capacity": "person_capacity",
+        "no_of_passengers": "person_capacity",
+        "floor_rise": "number_of_floor",
+        "travel_stops": "number_of_floor",
+        "number_of_stops": "no_of_stops",
+        "number_of_openings": "no_of_opening",
+        "car_travel": "total_height",
+        "landing_entrance": "landing_door_type",
+        "landing_door": "landing_door_type",
+        "car_entrance_door": "car_door_type",
+        "cabin_finish": "car_enclosure",
+        "base_cabin_finish": "car_enclosure",
+        "base_landing_door": "landing_door_type",
+        "clear_door_opening": "entrance_opening",
+        "reduction_gear_motor": "gear_motor_machine",
+        "wire_ropes": "wire_rope",
+        "lift_well": "shaft_width",
+        "no_of_unit": "number_of_unit",
+    }
+
+    for word_field, crm_field in aliases.items():
+        if not context.get(word_field):
+            context[word_field] = technical.get(crm_field, "")
+
+    # Values derived from existing technical snapshot.
+    capacity = technical.get("person_capacity")
+    if capacity:
+        context["capacity_display"] = str(capacity) + " passengers"
+        context["lift_capacity"] = capacity
+
+    context["lift_type"] = technical.get("lift_type", "")
+    context["floor_rise"] = technical.get("number_of_floor", "")
+    context["no_of_stops"] = technical.get("no_of_stops", "")
+    context["no_of_openings"] = technical.get("no_of_opening", "")
+    context["door_operation"] = technical.get("door_operation", "")
+    context["machine_room_position"] = technical.get(
+        "machine_room_position", ""
+    )
+
+    context["customer_address"] = (
+        quotation.site_address
+        or quotation.office_address
+        or ""
+    )
+
+    context["site_location"] = (
+        quotation.location
+        or quotation.site_address
+        or ""
+    )
+
+    context["cabin_model"] = commercial.get(
+        "cabin_model_no", ""
+    )
+
+    context["offer_validity_days"] = commercial.get(
+        "quotation_validity", ""
+    )
+
+    context["delivery_weeks"] = commercial.get(
+        "delivery_weeks", ""
+    )
+
+    context["installation_weeks"] = commercial.get(
+        "installation_weeks", ""
+    )
+
+    # Keep load blank unless an actual rated load is stored.
+    context["load"] = technical.get("load", "")
+    context["rated_load"] = technical.get("rated_load", "")
+
     document = DocxTemplate(BytesIO(template_bytes))
     document.render(context, autoescape=True)
 
