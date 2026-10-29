@@ -1,4 +1,9 @@
 
+from PIL import Image as PILImage
+from io import BytesIO as ImageBytesIO
+from docx.shared import Mm as ImageMm
+
+
 import json
 from io import BytesIO
 from docx.shared import Mm
@@ -34,6 +39,29 @@ def selected(value):
         "yes", "true", "1", "selected"
     )
 
+
+
+# DORADO AUTO FIT IMAGE
+def dorado_auto_fit_image(document, image_data, max_w, max_h):
+    data = bytes(image_data)
+
+    with PILImage.open(ImageBytesIO(data)) as img:
+        width, height = img.size
+
+    if width <= 0 or height <= 0:
+        raise ValueError("Invalid image dimensions")
+
+    scale = min(
+        max_w / width,
+        max_h / height,
+    )
+
+    return InlineImage(
+        document,
+        ImageBytesIO(data),
+        width=ImageMm(width * scale),
+        height=ImageMm(height * scale),
+    )
 
 def build_word_quotation(quotation, template_bytes, db=None):
     commercial = as_dict(quotation.commercial_data)
@@ -370,10 +398,10 @@ def build_word_quotation(quotation, template_bytes, db=None):
         ).mappings().all()
 
         image_fields = {
-            "MAIN_LIFT": ("main_lift_image", 115),
-            "GATE": ("landing_door_image", 48),
-            "MACHINE": ("machine_image", 48),
-            "CONTROLLER": ("controller_image", 48),
+            "MAIN_LIFT": ("main_lift_image", 80, 100),
+            "GATE": ("landing_door_image", 45, 55),
+            "CONTROLLER": ("controller_image", 45, 55),
+            "MACHINE": ("machine_image", 45, 55),
         }
 
         for row in rows:
@@ -381,11 +409,12 @@ def build_word_quotation(quotation, template_bytes, db=None):
             if category not in image_fields:
                 continue
 
-            field, width_mm = image_fields[category]
-            context[field] = InlineImage(
+            field, max_w, max_h = image_fields[category]
+            context[field] = dorado_auto_fit_image(
                 document,
-                BytesIO(bytes(row["image_data"])),
-                width=Mm(width_mm),
+                row["image_data"],
+                max_w,
+                max_h,
             )
 
     document.render(context, autoescape=True)
