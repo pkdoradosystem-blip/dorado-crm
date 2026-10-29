@@ -182,6 +182,115 @@ def build_word_quotation(quotation, template_bytes):
     context["load"] = technical.get("load", "")
     context["rated_load"] = technical.get("rated_load", "")
 
+
+    # -----------------------------------------------
+    # DORADO COMPLETE FIELD MAPPING
+    # -----------------------------------------------
+    extra_aliases = {
+        "control": "control",
+        "no_of_stops": "no_of_stops",
+        "no_of_openings": "no_of_opening",
+        "number_of_openings": "no_of_opening",
+        "landing_entrance": "landing_door_type",
+        "base_landing_door": "landing_door_type",
+        "car_entrance_door": "car_door_type",
+        "clear_door_opening": "entrance_opening",
+        "reduction_gear_motor": "gear_motor_machine",
+        "wire_ropes": "wire_rope",
+        "installation": "installation",
+        "operation": "door_operation",
+        "car_travel": "total_height",
+        "travel_stops": "number_of_floor",
+        "ard": "ard_required",
+    }
+
+    for word_key, crm_key in extra_aliases.items():
+        value = technical.get(crm_key)
+        if value is not None and str(value).strip():
+            context[word_key] = value
+
+    # Combined shaft dimensions
+    shaft_width = technical.get("shaft_width")
+    shaft_depth = technical.get("shaft_depth")
+
+    if shaft_width and shaft_depth:
+        context["lift_well"] = (
+            f"{shaft_width} x {shaft_depth} mm"
+        )
+
+    # Display-friendly values
+    context["travel_stops"] = (
+        str(technical.get("number_of_floor", ""))
+        + " / "
+        + str(technical.get("no_of_stops", ""))
+    )
+
+    context["base_elevator_description"] = (
+        str(technical.get("person_capacity", ""))
+        + " Passenger "
+        + str(technical.get("lift_type", ""))
+        + ", "
+        + str(technical.get("number_of_floor", ""))
+    )
+
+    context["base_specification"] = (
+        str(technical.get("landing_door_type", ""))
+        + " / "
+        + str(technical.get("car_enclosure", ""))
+    )
+
+
+    # DORADO EXACT TEMPLATE PLACEHOLDERS
+    exact_fields = {
+        "capacity": "person_capacity",
+        "travel": "number_of_floor",
+        "stops": "no_of_stops",
+        "openings": "no_of_opening",
+        "control_type": "control",
+        "base_door_type": "landing_door_type",
+        "base_cabin_finish": "car_enclosure",
+        "car_door": "car_door_type",
+        "clear_opening": "entrance_opening",
+        "machine": "gear_motor_machine",
+        "ropes": "wire_rope",
+        "installation_type": "installation",
+        "ard_yes_no": "ard_required",
+        "base_ard_status": "ard_required",
+        "operation": "door_operation",
+    }
+
+    for word_key, crm_key in exact_fields.items():
+        value = technical.get(crm_key)
+        if value is not None:
+            context[word_key] = value
+
+    width = technical.get("shaft_width")
+    depth = technical.get("shaft_depth")
+    if width and depth:
+        context["lift_well"] = f"{width} x {depth} mm"
+
+    capacity = technical.get("person_capacity", "")
+    lift_type = technical.get("lift_type", "")
+    floor = technical.get("number_of_floor", "")
+
+    context["base_lift_description"] = (
+        f"{capacity} Passenger {lift_type}, {floor}"
+    )
+
+    # Values not present in quotation remain blank.
+    context["unit_count"] = technical.get("number_of_unit", "")
+    context["load_kg"] = technical.get("load_kg", "")
+    context["flooring"] = technical.get("car_flooring", "")
+    context["representative_name"] = commercial.get(
+        "representative_name", ""
+    )
+    context["emergency_light_yes_no"] = technical.get(
+        "emergency_light_yes_no", ""
+    )
+    context["fireman_switch_yes_no"] = technical.get(
+        "fireman_switch_yes_no", ""
+    )
+
     document = DocxTemplate(BytesIO(template_bytes))
     document.render(context, autoescape=True)
 
