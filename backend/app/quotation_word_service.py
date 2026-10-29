@@ -1,8 +1,10 @@
 
 import json
 from io import BytesIO
+from docx.shared import Mm
+from sqlalchemy import text
 from decimal import Decimal, InvalidOperation
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 
 
 def as_dict(value):
@@ -33,7 +35,7 @@ def selected(value):
     )
 
 
-def build_word_quotation(quotation, template_bytes):
+def build_word_quotation(quotation, template_bytes, db=None):
     commercial = as_dict(quotation.commercial_data)
     technical = as_dict(quotation.technical_data)
 
@@ -292,6 +294,100 @@ def build_word_quotation(quotation, template_bytes):
     )
 
     document = DocxTemplate(BytesIO(template_bytes))
+
+
+    # DORADO FINAL MAPPING NORMALIZATION
+    def first_value(*values):
+        for value in values:
+            if value is None or isinstance(value, bool):
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, (list, tuple)):
+                if not value:
+                    continue
+                return ", ".join(str(x) for x in value if x is not None)
+            return value
+        return ""
+
+    context["customer_address"] = first_value(
+        quotation.office_address,
+        quotation.site_address,
+    )
+
+    context["site_location"] = first_value(
+        quotation.location,
+        quotation.site_address,
+    )
+
+    context["unit_count"] = first_value(
+        technical.get("number_of_unit"),
+        technical.get("no_of_unit"),
+        technical.get("unit_count"),
+    )
+
+    context["load_kg"] = first_value(
+        technical.get("load_kg"),
+        technical.get("rated_load"),
+        technical.get("load"),
+    )
+
+    context["load"] = context["load_kg"]
+    context["rated_load"] = context["load_kg"]
+
+    context["wire_ropes"] = first_value(
+        technical.get("wire_rope"),
+        technical.get("wire_ropes"),
+    )
+    context["ropes"] = context["wire_ropes"]
+
+    context["flooring"] = first_value(
+        technical.get("car_flooring"),
+        technical.get("flooring"),
+    )
+
+    context["delivery_weeks"] = first_value(
+        commercial.get("delivery_weeks"),
+        technical.get("delivery_weeks"),
+    )
+
+    context["installation_weeks"] = first_value(
+        commercial.get("installation_weeks"),
+        technical.get("installation_weeks"),
+    )
+
+    # DORADO WORD IMAGE INTEGRATION
+    if db is not None:
+        rows = db.execute(
+            text("""
+                SELECT qi.category, li.image_data
+                FROM quotation_images qi
+                JOIN lift_images li ON li.id = qi.image_id
+                WHERE qi.quotation_id = :qid
+                ORDER BY qi.display_order, qi.id
+            """),
+            {"qid": quotation.id},
+        ).mappings().all()
+
+        image_fields = {
+            "MAIN_LIFT": ("main_lift_image", 115),
+            "GATE": ("landing_door_image", 48),
+            "MACHINE": ("machine_image", 48),
+            "CONTROLLER": ("controller_image", 48),
+        }
+
+        for row in rows:
+            category = row["category"]
+            if category not in image_fields:
+                continue
+
+            field, width_mm = image_fields[category]
+            context[field] = InlineImage(
+                document,
+                BytesIO(bytes(row["image_data"])),
+                width=Mm(width_mm),
+            )
+
     document.render(context, autoescape=True)
 
     output = BytesIO()

@@ -336,6 +336,7 @@ def download_word_quotation(
         output = build_word_quotation(
             quotation,
             template["file_data"],
+            db=db,
         )
     except (ValueError, KeyError) as exc:
         raise HTTPException(400, str(exc))
