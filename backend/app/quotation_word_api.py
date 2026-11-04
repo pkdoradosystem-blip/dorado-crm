@@ -1,4 +1,4 @@
-
+﻿
 import io
 import re
 import zipfile
@@ -357,5 +357,164 @@ def download_word_quotation(
         headers={
             "Content-Disposition":
                 f'attachment; filename="{filename}"'
+        },
+    )
+
+@router.get("/templates/{template_id}/download")
+def download_uploaded_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    user: EmployeeMaster = Depends(get_current_user),
+):
+    require_permission(db, user, "quotation_management", "view")
+    template = get_template(db, template_id)
+
+    filename = re.sub(
+        r"[^A-Za-z0-9_.-]",
+        "_",
+        template["file_name"]
+    )
+
+    return StreamingResponse(
+        io.BytesIO(template["file_data"]),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+# ==========================================================
+# DORADO WORD TEMPLATE PDF PREVIEW
+# ==========================================================
+
+@router.get("/templates/{template_id}/preview-pdf")
+def preview_word_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    user: EmployeeMaster = Depends(get_current_user),
+):
+    require_permission(
+        db, user, "quotation_management", "view"
+    )
+
+    template = get_template(db, template_id)
+
+    import os
+    from app.word_preview_converter import (
+        convert_docx_to_pdf,
+        convert_docx_to_pdf_linux,
+    )
+
+    try:
+        if os.name == "nt":
+            pdf_bytes = convert_docx_to_pdf(
+                template["file_data"]
+            )
+        else:
+            pdf_bytes = convert_docx_to_pdf_linux(
+                template["file_data"]
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Word preview conversion is unavailable",
+        )
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": "inline; filename=template_preview.pdf",
+        },
+    )
+
+
+# ==========================================================
+# FINAL QUOTATION PDF FROM DEFAULT WORD TEMPLATE
+# ==========================================================
+
+@router.get("/{quotation_id}/pdf")
+def preview_filled_word_quotation(
+    quotation_id: int,
+    template_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: EmployeeMaster = Depends(get_current_user),
+):
+    require_permission(db, user, "quotation_management", "view")
+
+    quotation = db.query(QuotationMaster).filter(
+        QuotationMaster.id == quotation_id,
+        QuotationMaster.active.is_(True),
+    ).first()
+
+    if quotation is None:
+        raise HTTPException(404, "Quotation not found")
+
+    quotation_type = normalized_type(quotation.quotation_type)
+
+    if template_id is None:
+        template_id = db.execute(
+            select(word_template_defaults.c.template_id).where(
+                word_template_defaults.c.quotation_type == quotation_type
+            )
+        ).scalar()
+
+        if template_id is None:
+            raise HTTPException(
+                409,
+                f"No default Word template for {quotation_type}",
+            )
+    else:
+        assigned_type = db.execute(
+            select(word_template_types.c.quotation_type).where(
+                word_template_types.c.template_id == template_id
+            )
+        ).scalar()
+
+        if assigned_type != quotation_type:
+            raise HTTPException(
+                409,
+                "Template type does not match quotation type",
+            )
+
+    template = get_template(db, template_id)
+
+    try:
+        docx_bytes = build_word_quotation(
+            quotation,
+            template["file_data"],
+            db=db,
+        )
+
+        import os
+        from app.word_preview_converter import (
+            convert_docx_to_pdf,
+            convert_docx_to_pdf_linux,
+        )
+
+        if os.name == "nt":
+            pdf_bytes = convert_docx_to_pdf(docx_bytes)
+        else:
+            pdf_bytes = convert_docx_to_pdf_linux(docx_bytes)
+
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception:
+        raise HTTPException(
+            503,
+            "Quotation PDF conversion unavailable",
+        )
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition":
+                'inline; filename="Dorado_Quotation.pdf"',
         },
     )
