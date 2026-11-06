@@ -1,3 +1,4 @@
+import re
 
 from PIL import Image as PILImage
 from io import BytesIO as ImageBytesIO
@@ -52,6 +53,7 @@ def dorado_auto_fit_image(document, image_data, max_w, max_h):
         raise ValueError("Invalid image dimensions")
 
     scale = min(
+        1.0,
         max_w / width,
         max_h / height,
     )
@@ -303,8 +305,16 @@ def build_word_quotation(quotation, template_bytes, db=None):
     lift_type = technical.get("lift_type", "")
     floor = technical.get("number_of_floor", "")
 
+    # Avoid duplicated words such as "Passenger Passenger Lift".
+    lift_type_text = str(lift_type or "").strip()
+    capacity_text = str(capacity or "").strip()
+    floor_text = str(floor or "").strip()
+    if lift_type_text.lower().startswith("passenger"):
+        description = f"{capacity_text} {lift_type_text}".strip()
+    else:
+        description = f"{capacity_text} Passenger {lift_type_text}".strip()
     context["base_lift_description"] = (
-        f"{capacity} Passenger {lift_type}, {floor}"
+        f"{description}, {floor_text}" if floor_text else description
     )
 
     # Values not present in quotation remain blank.
@@ -384,8 +394,162 @@ def build_word_quotation(quotation, template_bytes, db=None):
         technical.get("installation_weeks"),
     )
 
+    # Match all placeholders in the uploaded Dorado Modern template.
+    # Only populate from real quotation data; never invent specifications.
+    additional_fields = {
+        "speed": ("speed", "lift_speed"),
+        "overhead": ("overhead", "over_head"),
+        "pit": ("pit", "pit_depth"),
+        "power_supply": ("power_supply",),
+        "machine_room_dimension": ("machine_room_dimension",),
+        "installation_type": ("installation", "installation_type"),
+        "base_door_type": ("landing_door_type", "base_door_type"),
+        "base_cabin_finish": ("car_enclosure", "base_cabin_finish"),
+        "emergency_light_yes_no": ("emergency_light_yes_no",),
+        "fireman_switch_yes_no": ("fireman_switch_yes_no",),
+    }
+    for word_key, keys in additional_fields.items():
+        if not context.get(word_key):
+            context[word_key] = first_value(
+                *(technical.get(k) for k in keys),
+                *(commercial.get(k) for k in keys),
+            )
+
+    # Always define image placeholders, even when no image is selected.
+    for image_key in (
+        "main_lift_image", "landing_door_image",
+        "controller_image", "machine_image",
+    ):
+        context[image_key] = ""
+
+    # DORADO PLAIN TEMPLATE SUPPORT V1
+    # Detect the selected legacy <<...>> template without altering its layout.
+    def plain_paragraphs(doc):
+        from docx.oxml.ns import qn
+        from docx.text.paragraph import Paragraph
+        for node in doc.element.body.iter(qn("w:p")):
+            yield Paragraph(node, doc)
+        for section in doc.sections:
+            for part in (section.header, section.footer):
+                for node in part._element.iter(qn("w:p")):
+                    yield Paragraph(node, part)
+
+
+    def plain_replace(paragraph, values):
+        """Replace only placeholder characters in existing w:t nodes.
+
+        Do not assign run.text or paragraph.text: those setters rebuild XML
+        and can remove run-level markup. All paragraph/table/page formatting,
+        run properties, tabs, breaks, and drawings are retained.
+        """
+        from docx.oxml.ns import qn
+
+        # Word may split one <<placeholder>> across multiple text nodes.
+        # Work with those nodes directly, preserving all surrounding XML.
+        nodes = list(paragraph._p.iter(qn("w:t")))
+        if not nodes:
+            return
+        whole = "".join(node.text or "" for node in nodes)
+        if "<<" not in whole:
+            return
+
+        pattern = re.compile(r"DRDS/<<ID>>|<<([^<>]+)>>")
+        for match in reversed(list(pattern.finditer(whole))):
+            if match.group(0) == "DRDS/<<ID>>":
+                value = values.get("__legacy_offer__")
+            else:
+                value = values.get(match.group(1).strip())
+            if value is None:
+                continue
+            value = str(value)
+
+            cursor = 0
+            spans = []
+            for node in nodes:
+                original = node.text or ""
+                end = cursor + len(original)
+                if cursor < match.end() and end > match.start():
+                    spans.append((node, max(0, match.start() - cursor),
+                                  min(len(original), match.end() - cursor)))
+                cursor = end
+            if not spans:
+                continue
+            for i, (node, start, end) in enumerate(spans):
+                original = node.text or ""
+                node.text = (original[:start] + (value if i == 0 else "")
+                             + original[end:])
+                # Word needs xml:space=preserve for meaningful edge spaces.
+                if node.text and (node.text[0].isspace() or node.text[-1].isspace()):
+                    node.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+
+    from docx import Document
+    source_doc = Document(BytesIO(template_bytes))
+
+    is_plain_template = any(
+        "<<" in p.text and ">>" in p.text
+        for p in plain_paragraphs(source_doc)
+    )
+
+    # Template display LOAD: persons x 68 kg, as requested.
+    # This is a quotation display calculation, not a certified rated load.
+    person_raw = str(technical.get("person_capacity") or "").strip()
+    person_match = re.match(r"^(\d+(?:\.\d+)?)\s*(?:persons?|passengers?)?\s*$", person_raw, re.I)
+    calculated_load = ""
+    if person_match:
+        count = Decimal(person_match.group(1))
+        calculated_load = f"{count * Decimal(68):g}"
+
+    plain_fields = {
+        "Name": context.get("customer_name", ""),
+        "Address": context.get("customer_address", ""),
+        "Pin": first_value(commercial.get("pin"), commercial.get("pincode"), technical.get("pin")),
+        "Contact": context.get("mobile", ""),
+        "Email": first_value(commercial.get("email"), technical.get("email")),
+        "quotation_no": context.get("quotation_no", ""),
+        "Date": context.get("quotation_date", ""),
+        "Marketing By (Name)": context.get("representative_name", ""),
+        "Floor": technical.get("number_of_floor", context.get("floor_rise", "")),
+        "Person": re.sub(r"(?i)\s*(persons?|passengers?)\s*$", "", str(technical.get("person_capacity") or "")).strip(),
+        "Lifttype": context.get("lift_type", ""),
+        "Site": context.get("site_location", ""),
+        "Load": calculated_load or technical.get("rated_load") or technical.get("load") or "",
+        "FLHeight": re.sub(r"(?i)\s*(?:meters?|m)\s*$", "", str(first_value(technical.get("total_height"), technical.get("floor_height")))).strip(),
+        "NoOpening": technical.get("no_of_opening", context.get("no_of_openings", "")),
+        "NoStop": context.get("no_of_stops", ""),
+        "Landoor": technical.get("landing_door_type", ""),
+        "CarEncloser": technical.get("car_enclosure", ""),
+        "cardoor": technical.get("car_door_type", ""),
+        "opening": re.sub(r"(?i)\s*mm\s*$", "", str(technical.get("entrance_opening") or "")).strip(),
+        "ShaftW": re.sub(r"(?i)\s*mm\s*$", "", str(technical.get("shaft_width") or "")).strip(),
+        "ShaftD": re.sub(r"(?i)\s*mm\s*$", "", str(technical.get("shaft_depth") or "")).strip(),
+        "Door Operation": technical.get("door_operation", ""),
+        "Overhead": re.sub(r"(?i)\s*mm\s*$", "", str(first_value(technical.get("overhead"), technical.get("over_head")))).strip(),
+        "Ard": first_value(technical.get("ard_required"), commercial.get("ard_selected")),
+        # Fields present in the final uploaded Word template.
+        "drive_make": first_value(technical.get("drive_make"), technical.get("vvvf_drive_make"), technical.get("vvvf_make"), commercial.get("drive_make")),
+        "speed": first_value(technical.get("speed"), technical.get("lift_speed")),
+        "gear_motor_machine": first_value(technical.get("gear_motor_machine"), technical.get("machine_make")),
+        # Machine manufacturer is separate from machine type (e.g. Geared).
+        "machine_make": first_value(
+            technical.get("machine_make"),
+            technical.get("gear_motor_machine_make"),
+            technical.get("motor_make"),
+            commercial.get("machine_make"),
+            commercial.get("gear_motor_machine_make"),
+            commercial.get("motor_make"),
+        ),
+        "installation": first_value(technical.get("installation"), technical.get("installation_type")),
+        "price": context.get("final_price_including_gst", ""),
+        "Cabine Model No.": context.get("cabin_model_no", ""),
+        "License": re.sub(r"\.00$", "", str(context.get("license_fee") or "")).strip(),
+        "Validity": re.sub(r"(?i)\s*days?\s*$", "", str(context.get("quotation_validity") or "")).strip(),
+    }
+    # The original template used <<ID>> after a fixed old prefix.
+    # Replace that entire legacy prefix only when present.
+    plain_fields["__legacy_offer__"] = context.get("quotation_no", "")
+
     # DORADO WORD IMAGE INTEGRATION
-    if db is not None:
+    if db is not None and not is_plain_template:
         rows = db.execute(
             text("""
                 SELECT qi.category, li.image_data
@@ -410,15 +574,25 @@ def build_word_quotation(quotation, template_bytes, db=None):
                 continue
 
             field, max_w, max_h = image_fields[category]
-            context[field] = dorado_auto_fit_image(
-                document,
-                row["image_data"],
-                max_w,
-                max_h,
-            )
+            if row["image_data"] is not None:
+                context[field] = dorado_auto_fit_image(
+                    document,
+                    row["image_data"],
+                    max_w,
+                    max_h,
+                )
 
-    document.render(context, autoescape=True)
+    if is_plain_template:
+        filled = source_doc
+        for paragraph in plain_paragraphs(filled):
+            plain_replace(paragraph, plain_fields)
+    else:
+        document.render(context, autoescape=True)
+
 
     output = BytesIO()
-    document.save(output)
+    if is_plain_template:
+        filled.save(output)
+    else:
+        document.save(output)
     return output.getvalue()
