@@ -515,13 +515,11 @@ def get_form(code: str, db: Session = Depends(get_db)):
              "options": [
                  x["value"]
                  for x in employee_options(db)
-                 if (
-                     "marketing" in str(x.get("department") or "").lower()
-                     or "sales" in str(x.get("department") or "").lower()
-                 )
+                 if str(x.get("designation") or "").strip().lower()
+                 in ("lead collector", "marketing head")
              ]},
             {"key": "lead_source", "label": "Lead Source", "type": "dropdown", "required": True,
-             "options": [x["value"] for x in common_master_options(db, "LEAD_SOURCE")]},
+             "options": [x["value"] for x in active_master_values(db, LeadSourceMaster, "lead_source")]},
             {"key": "customer_name", "label": "Customer Name", "type": "text", "required": True},
             {"key": "mobile", "label": "Mobile", "type": "phone", "required": True},
             {
@@ -544,9 +542,9 @@ def get_form(code: str, db: Session = Depends(get_db)):
         },
         {"key": "location", "label": "Location", "type": "map", "required": True},
             {"key": "building_type", "label": "Building Type", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in common_master_options(db, "BUILDING_TYPE")]},
+             "options": [x["value"] for x in active_master_values(db, BuildingTypeMaster, "building_type")]},
             {"key": "lift_type", "label": "Lift Type", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in common_master_options(db, "LIFT_TYPE")]},
+             "options": [x["value"] for x in active_master_values(db, LiftTypeMaster, "lift_type")]},
             {"key": "collector_view", "label": "Executive View", "type": "dropdown", "required": True,
              "options": [x["value"] for x in common_master_options(db, "EXECUTIVE_VIEW")]},
             {"key": "collector_remarks", "label": "Executive Remarks", "type": "dropdown", "required": True,
@@ -557,7 +555,7 @@ def get_form(code: str, db: Session = Depends(get_db)):
             {"key": "image_3", "label": "Image 3", "type": "image", "required": False},
             {"key": "marketing_head", "label": "Assigned Marketing Head", "type": "auto", "required": False, "readOnly": True},
             {"key": "lead_priority", "label": "Lead Priority", "type": "dropdown", "required": False,
-             "options": [x["value"] for x in common_master_options(db, "LEAD_PRIORITY")]},
+             "options": [x["value"] for x in active_master_values(db, LeadPriorityMaster, "lead_priority")]},
         ],
     }
 
@@ -1359,31 +1357,29 @@ def quotation_to_dict(
 
 
 def next_quotation_number(db: Session) -> str:
-    year = datetime.now().year
+    today = datetime.now()
+
+    fy_start = today.year if today.month >= 4 else today.year - 1
+    fy = f"{fy_start % 100:02d}-{(fy_start + 1) % 100:02d}"
+
+    prefix = f"DRD/{fy}/Q-"
 
     rows = (
-        db.query(QuotationMaster)
-        .filter(
-            QuotationMaster.quotation_no.like(
-                f"Q-{year}-%"
-            )
-        )
+        db.query(QuotationMaster.quotation_no)
+        .filter(QuotationMaster.quotation_no.like(f"{prefix}%"))
         .all()
     )
 
     highest = 0
 
     for row in rows:
-        try:
-            number = int(
-                str(row.quotation_no).split("-")[-1]
-            )
-            highest = max(highest, number)
-        except (TypeError, ValueError):
-            continue
+        value = str(row.quotation_no or "")
+        suffix = value[len(prefix):]
 
-    return f"Q-{year}-{highest + 1:04d}"
+        if suffix.isdigit():
+            highest = max(highest, int(suffix))
 
+    return f"{prefix}{highest + 1:04d}"
 
 def quotation_amounts(
     items: list[dict[str, Any]],
