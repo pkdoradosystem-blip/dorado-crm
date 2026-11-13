@@ -592,7 +592,73 @@ def build_word_quotation(quotation, template_bytes, db=None):
 
     output = BytesIO()
     if is_plain_template:
-        filled.save(output)
+        from zipfile import ZipFile
+        from lxml import etree
+        from docx.oxml.ns import qn
+
+        def replace_xml_only(xml_bytes):
+            root = etree.fromstring(xml_bytes)
+            pattern = re.compile(r"DRDS/<<ID>>|<<([^<>]+)>>")
+
+            for paragraph in root.iter(qn("w:p")):
+                nodes = list(paragraph.iter(qn("w:t")))
+                whole = "".join(node.text or "" for node in nodes)
+
+                for match in reversed(list(pattern.finditer(whole))):
+                    if match.group(0) == "DRDS/<<ID>>":
+                        value = plain_fields.get("__legacy_offer__")
+                    else:
+                        value = plain_fields.get(match.group(1).strip())
+
+                    if value is None:
+                        continue
+
+                    cursor = 0
+                    spans = []
+
+                    for node in nodes:
+                        original_text = node.text or ""
+                        end = cursor + len(original_text)
+                        if cursor < match.end() and end > match.start():
+                            spans.append((
+                                node,
+                                max(0, match.start() - cursor),
+                                min(len(original_text), match.end() - cursor),
+                            ))
+                        cursor = end
+
+                    for i, (node, start, end) in enumerate(spans):
+                        original_text = node.text or ""
+                        node.text = (
+                            original_text[:start]
+                            + (str(value) if i == 0 else "")
+                            + original_text[end:]
+                        )
+                        if node.text and (
+                            node.text[0].isspace() or node.text[-1].isspace()
+                        ):
+                            node.set(
+                                "{http://www.w3.org/XML/1998/namespace}space",
+                                "preserve",
+                            )
+
+            return etree.tostring(
+                root, encoding="UTF-8", xml_declaration=True
+            )
+
+        with ZipFile(BytesIO(template_bytes), "r") as original_zip:
+            with ZipFile(output, "w") as output_zip:
+                for info in original_zip.infolist():
+                    part = original_zip.read(info.filename)
+                    if (
+                        info.filename == "word/document.xml"
+                        or re.fullmatch(
+                            r"word/(header|footer)\\d+\\.xml",
+                            info.filename,
+                        )
+                    ):
+                        part = replace_xml_only(part)
+                    output_zip.writestr(info, part)
     else:
         document.save(output)
     return output.getvalue()
