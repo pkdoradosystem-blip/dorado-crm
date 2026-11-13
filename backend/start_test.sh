@@ -26,5 +26,7 @@ python -c "import app.main"
 echo "=== SQLITE AUDIT AFTER APP INITIALIZATION ==="
 python audit_render_sqlite.py
 
+echo "=== ACTUAL QUOTATION DOCX PDF TEST ==="
+python quotation_e2e_self_test.py
 echo "=== STARTING FASTAPI ==="
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}"
