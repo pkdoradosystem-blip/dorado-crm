@@ -14,5 +14,8 @@ python migrate_test_generated_documents.py
 echo "=== LIBREOFFICE VERSION ==="
 libreoffice --version
 
+echo "=== WORD TO PDF SELF TEST ==="
+python render_pdf_self_test.py
+
 echo "=== STARTING FASTAPI ==="
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}"
