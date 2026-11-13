@@ -11,6 +11,9 @@ fi
 echo "=== SQLITE TEST MIGRATION ==="
 python migrate_test_generated_documents.py
 
+echo "=== RENDER SQLITE AUDIT ==="
+python audit_render_sqlite.py
+
 echo "=== LIBREOFFICE VERSION ==="
 libreoffice --version
 
