@@ -21,7 +21,9 @@ echo "=== WORD TO PDF SELF TEST ==="
 python render_pdf_self_test.py
 
 echo "=== INITIALIZING TEST APP TABLES ==="
-python -c "import app.main"
+echo "=== TIMED APP IMPORT START ==="
+python -u -X importtime -c "import app.main" 2>&1
+echo "=== TIMED APP IMPORT COMPLETE ==="
 
 echo "=== SQLITE AUDIT AFTER APP INITIALIZATION ==="
 python audit_render_sqlite.py
