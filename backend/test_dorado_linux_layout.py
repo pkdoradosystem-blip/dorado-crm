@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
 from lxml import etree
@@ -37,4 +37,30 @@ output.write_bytes(pdf_bytes)
 
 print("LINUX PDF CREATED:", output, flush=True)
 print("PDF SIZE:", len(pdf_bytes), flush=True)
+
+import subprocess
+
+result = subprocess.run(
+    ["pdfinfo", str(output)],
+    capture_output=True,
+    text=True,
+    check=True,
+)
+
+pages = None
+
+for line in result.stdout.splitlines():
+    if line.startswith("Pages:"):
+        pages = int(line.split(":", 1)[1].strip())
+        break
+
+print("PDF PAGE COUNT:", pages, flush=True)
+
+if pages != 3:
+    raise RuntimeError(
+        f"Expected 3 pages, got {pages}"
+    )
+
+print("ORIGINAL 3 PAGE COUNT: VERIFIED", flush=True)
+
 print("=== STEP 345 LINUX CONVERSION PASSED ===", flush=True)
