@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Original Dorado Word Linux PDF test
+RUN python test_dorado_layout_experiment.py
 RUN python test_dorado_linux_layout.py
 
 CMD ["sh", "/app/start_test.sh"]
