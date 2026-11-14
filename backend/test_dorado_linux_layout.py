@@ -56,6 +56,45 @@ for line in result.stdout.splitlines():
 
 print("PDF PAGE COUNT:", pages, flush=True)
 
+print("=== PDF PAGE CONTENT DIAGNOSTIC ===", flush=True)
+
+for page_number in range(1, pages + 1):
+    result = subprocess.run(
+        [
+            "pdftotext",
+            "-f", str(page_number),
+            "-l", str(page_number),
+            "-layout",
+            str(output),
+            "-"
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    lines = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+    print(
+        f"PAGE {page_number}: {len(lines)} non-empty lines",
+        flush=True
+    )
+
+    print("FIRST LINES:", flush=True)
+    for line in lines[:8]:
+        print(line[:160], flush=True)
+
+    print("LAST LINES:", flush=True)
+    for line in lines[-8:]:
+        print(line[:160], flush=True)
+
+print("=== END PDF PAGE DIAGNOSTIC ===", flush=True)
+
+
 if pages != 3:
     raise RuntimeError(
         f"Expected 3 pages, got {pages}"
